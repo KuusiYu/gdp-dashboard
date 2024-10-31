@@ -1,197 +1,175 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.font_manager import FontProperties
-import os
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# 检查字体路径是否正确
-font_path = 'C:/Windows/Fonts/simsun.ttc'  # 例如，在Windows系统中使用宋体
-if not os.path.exists(font_path):
-    st.error("字体文件路径不正确，请检查并更改为有效路径")
-else:
-    font = FontProperties(fname=font_path)  # 加载字体文件
+plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置字体为黑体
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
-    # Streamlit应用程序标题
-    st.title("篮球比赛预测模拟器")
+# Elo rating functions
+def initialize_elo(team_names):
+    return {team: 1500 for team in team_names}
 
-    # 在侧边栏添加用户输入
-    st.sidebar.title("输入参数")
+def calculate_elo(current_elo, opponent_elo, result, k=32):
+    expected_score = 1 / (1 + 10 ** ((opponent_elo - current_elo) / 400))
+    new_elo = current_elo + k * (result - expected_score)
+    return new_elo
+
+def update_elo(elo_ratings, match_results):
+    for match in match_results:
+        home_team, away_team, result = match
+        if result == '胜':
+            home_result, away_result = 1, 0
+        elif result == '平':
+            home_result, away_result = 0.5, 0.5
+        else:
+            home_result, away_result = 0, 1
+        
+        elo_ratings[home_team] = calculate_elo(elo_ratings[home_team], elo_ratings[away_team], home_result)
+        elo_ratings[away_team] = calculate_elo(elo_ratings[away_team], elo_ratings[home_team], away_result)
     
-    # 主队和客队整体平均得分与失分
-    home_team_avg_points_for = st.sidebar.number_input("主队近期场均得分", value=105.0, format="%.2f")
-    home_team_avg_points_against = st.sidebar.number_input("主队近期场均失分", value=99.0, format="%.2f")
-    away_team_avg_points_for = st.sidebar.number_input("客队近期场均得分", value=102.0, format="%.2f")
-    away_team_avg_points_against = st.sidebar.number_input("客队近期场均失分", value=101.0, format="%.2f")
+    return elo_ratings
 
-    # 增加开关来控制是否使用各节得分和失分进行预测
-    use_quarter_scores = st.sidebar.checkbox("使用各节得分和失分进行预测", value=True)
+# Function to simulate handicap data
+def simulate_handicap_data(n_samples=1000):
+    np.random.seed(42)
+    features = {
+        'feature1': np.random.randn(n_samples),
+        'feature2': np.random.randn(n_samples),
+        'feature3': np.random.randn(n_samples),
+    }
+    target = np.random.choice([0, 1], size=n_samples)
+    data = pd.DataFrame(features)
+    data['result'] = target
+    return data
 
-    if use_quarter_scores:
-        # 主队和客队各节平均得分与失分
-        home_team_q1_avg_points_for = st.sidebar.number_input("主队第一节平均得分", value=26.0, format="%.2f")
-        home_team_q1_avg_points_against = st.sidebar.number_input("主队第一节平均失分", value=25.0, format="%.2f")
-        home_team_q2_avg_points_for = st.sidebar.number_input("主队第二节平均得分", value=27.0, format="%.2f")
-        home_team_q2_avg_points_against = st.sidebar.number_input("主队第二节平均失分", value=26.0, format="%.2f")
-        home_team_q3_avg_points_for = st.sidebar.number_input("主队第三节平均得分", value=27.0, format="%.2f")
-        home_team_q3_avg_points_against = st.sidebar.number_input("主队第三节平均失分", value=26.0, format="%.2f")
-        home_team_q4_avg_points_for = st.sidebar.number_input("主队第四节平均得分", value=25.0, format="%.2f")
-        home_team_q4_avg_points_against = st.sidebar.number_input("主队第四节平均失分", value=24.0, format="%.2f")
+# Function to estimate average goals
+def estimate_avg_goals(goals, conceded, home_avg_goals, away_avg_goals, home_avg_conceded, away_avg_conceded, correlation):
+    avg_goals = (np.mean(goals) + home_avg_goals) * correlation
+    avg_conceded = (np.mean(conceded) + away_avg_conceded) * correlation
+    return avg_goals, avg_conceded
 
-        away_team_q1_avg_points_for = st.sidebar.number_input("客队第一节平均得分", value=25.0, format="%.2f")
-        away_team_q1_avg_points_against = st.sidebar.number_input("客队第一节平均失分", value=26.0, format="%.2f")
-        away_team_q2_avg_points_for = st.sidebar.number_input("客队第二节平均得分", value=26.0, format="%.2f")
-        away_team_q2_avg_points_against = st.sidebar.number_input("客队第二节平均失分", value=27.0, format="%.2f")
-        away_team_q3_avg_points_for = st.sidebar.number_input("客队第三节平均得分", value=26.0, format="%.2f")
-        away_team_q3_avg_points_against = st.sidebar.number_input("客队第三节平均失分", value=27.0, format="%.2f")
-        away_team_q4_avg_points_for = st.sidebar.number_input("客队第四节平均得分", value=24.0, format="%.2f")
-        away_team_q4_avg_points_against = st.sidebar.number_input("客队第四节平均失分", value=25.0, format="%.2f")
+# Function to generate scores
+def generate_scores(avg_goals, size, factors):
+    adjusted_goals = avg_goals * factors
+    return np.random.poisson(adjusted_goals, size)
 
-    over_under_line = st.sidebar.number_input("大小分", value=210.5, format="%.2f")
-    spread = st.sidebar.number_input("让分 (主队让分)", value=-5.5, format="%.2f")
-    odds_home_team = st.sidebar.number_input("主队让分赔率", value=1.90, format="%.2f")
-    odds_away_team = st.sidebar.number_input("客队让分赔率", value=1.90, format="%.2f")
+# Function to analyze data
+def analyze_data(data, column_name):
+    counts = data.value_counts()
+    percentages = data.value_counts(normalize=True) * 100
+    return pd.DataFrame({column_name: counts.index, '次数': counts.values, '百分比': percentages.values})
 
-    # 模拟次数
-    num_simulations = 700000
+# Function to calculate odds
+def calculate_odds(stats):
+    stats['赔率'] = 100 / stats['百分比']
+    return stats
 
-    if use_quarter_scores:
-        # 四节比赛的模拟得分
-        home_team_scores_q1 = np.random.normal(home_team_q1_avg_points_for, np.sqrt(np.abs(home_team_q1_avg_points_for - home_team_q1_avg_points_against)), num_simulations)
-        home_team_scores_q2 = np.random.normal(home_team_q2_avg_points_for, np.sqrt(np.abs(home_team_q2_avg_points_for - home_team_q2_avg_points_against)), num_simulations)
-        home_team_scores_q3 = np.random.normal(home_team_q3_avg_points_for, np.sqrt(np.abs(home_team_q3_avg_points_for - home_team_q3_avg_points_against)), num_simulations)
-        home_team_scores_q4 = np.random.normal(home_team_q4_avg_points_for, np.sqrt(np.abs(home_team_q4_avg_points_for - home_team_q4_avg_points_against)), num_simulations)
-        away_team_scores_q1 = np.random.normal(away_team_q1_avg_points_for, np.sqrt(np.abs(away_team_q1_avg_points_for - away_team_q1_avg_points_against)), num_simulations)
-        away_team_scores_q2 = np.random.normal(away_team_q2_avg_points_for, np.sqrt(np.abs(away_team_q2_avg_points_for - away_team_q2_avg_points_against)), num_simulations)
-        away_team_scores_q3 = np.random.normal(away_team_q3_avg_points_for, np.sqrt(np.abs(away_team_q3_avg_points_for - away_team_q3_avg_points_against)), num_simulations)
-        away_team_scores_q4 = np.random.normal(away_team_q4_avg_points_for, np.sqrt(np.abs(away_team_q4_avg_points_for - away_team_q4_avg_points_against)), num_simulations)
+# Streamlit application
+st.title('足球比赛模拟器')
 
-        # 合并四节得分
-        home_team_scores = home_team_scores_q1 + home_team_scores_q2 + home_team_scores_q3 + home_team_scores_q4
-        away_team_scores = away_team_scores_q1 + away_team_scores_q2 + away_team_scores_q3 + away_team_scores_q4
+# 在侧边栏添加用户输入
+st.sidebar.title("输入参数")
+home_avg_goals = st.sidebar.number_input('主队场均进球', value= 1.0, format="%.1f")
+away_avg_goals = st.sidebar.number_input('客队场均进球', value= 1.0, format="%.1f")
+home_avg_conceded = st.sidebar.number_input('主队场均失球', value= 1.0, format="%.1f")
+away_avg_conceded = st.sidebar.number_input('客队场均失球', value= 1.0, format="%.1f")
+correlation = st.sidebar.slider('进球相关性', 0.0, 1.0, 0.8)
+n_simulations = st.sidebar.number_input('模拟次数', value=500000, step=10000)
 
-        # 计算各节总得分
-        total_scores_q1 = home_team_scores_q1 + away_team_scores_q1
-        total_scores_q2 = home_team_scores_q2 + away_team_scores_q2
-        total_scores_q3 = home_team_scores_q3 + away_team_scores_q3
-        total_scores_q4 = home_team_scores_q4 + away_team_scores_q4
-    else:
-        # 使用整体平均得分和失分进行模拟
-        home_team_scores = np.random.normal(home_team_avg_points_for, np.sqrt(np.abs(home_team_avg_points_for - home_team_avg_points_against)), num_simulations)
-        away_team_scores = np.random.normal(away_team_avg_points_for, np.sqrt(np.abs(away_team_avg_points_for - away_team_avg_points_against)), num_simulations)
-    
-    total_scores = home_team_scores + away_team_scores
+# 模拟数据
+weather_factors = np.random.normal(1.0, 0.1, n_simulations)
+team_factors = np.random.normal(1.0, 0.1, n_simulations)
+home_away_factors = np.random.normal(1.0, 0.05, n_simulations)
+card_factors = np.random.normal(1.0, 0.05, n_simulations)
 
-    # 计算胜负
-    home_team_wins = np.sum(home_team_scores > away_team_scores)
-    away_team_wins = np.sum(home_team_scores < away_team_scores)
+home_goals_list = generate_scores(home_avg_goals, n_simulations, weather_factors * team_factors * home_away_factors * card_factors)
+away_goals_list = generate_scores(away_avg_goals, n_simulations, weather_factors * team_factors / home_away_factors * card_factors)
 
-    # 计算覆盖情况
-    over_hits = np.sum(total_scores > over_under_line)
-    under_hits = np.sum(total_scores < over_under_line)
-    spread_hits_home_team = np.sum((home_team_scores - away_team_scores) > spread)
-    spread_hits_away_team = np.sum((home_team_scores - away_team_scores) < spread)
+# 计算比赛结果
+match_results = np.where(home_goals_list > away_goals_list, '胜', np.where(home_goals_list < away_goals_list, '负', '平'))
 
-    # 计算平均得分
-    average_home_team_score = np.mean(home_team_scores)
-    average_away_team_score = np.mean(away_team_scores)
-    average_total_score = np.mean(total_scores)
+# 分析比赛结果
+results_analysis = analyze_data(pd.Series(match_results), '比赛结果')
 
-    # 计算净得分差异
-    average_score_diff = average_home_team_score - average_away_team_score
+# 计算总进球数
+total_goals_list = home_goals_list + away_goals_list
 
-    # 计算投注回报率
-    if spread_hits_home_team / num_simulations > 1 / odds_home_team:
-        bet_home_roi = (spread_hits_home_team / num_simulations * odds_home_team - 1) * 100
-    else:
-        bet_home_roi = (spread_hits_home_team / num_simulations * odds_home_team - 1) * 100
-    
-    if spread_hits_away_team / num_simulations > 1 / odds_away_team:
-        bet_away_roi = (spread_hits_away_team / num_simulations * odds_away_team - 1) * 100
-    else:
-        bet_away_roi = (spread_hits_away_team / num_simulations * odds_away_team - 1) * 100
+# 计算比分
+match_scores_list = [f"{hg}-{ag}" for hg, ag in zip(home_goals_list, away_goals_list)]
 
-    # 打印结果
-    st.write(f"主队获胜概率: {home_team_wins / num_simulations * 100:.2f}%")
-    st.write(f"客队获胜概率: {away_team_wins / num_simulations * 100:.2f}%")
-    st.write(f"大于大小分的概率: {over_hits / num_simulations * 100:.2f}%")
-    st.write(f"小于大小分的概率: {under_hits / num_simulations * 100:.2f}%")
-    st.write(f"主队赢得让分的概率: {spread_hits_home_team / num_simulations * 100:.2f}%")
-    st.write(f"客队赢得让分的概率: {spread_hits_away_team / num_simulations * 100:.2f}%")
+# 分析结果
+home_goals_analysis = analyze_data(pd.Series(home_goals_list), '进球数')
+away_goals_analysis = analyze_data(pd.Series(away_goals_list), '进球数')
+total_goals_analysis = analyze_data(pd.Series(total_goals_list), '总进球数')
+match_scores_analysis = analyze_data(pd.Series(match_scores_list), '比分')
 
-    st.write(f"\n主队平均得分: {average_home_team_score:.2f}")
-    st.write(f"客队平均得分: {average_away_team_score:.2f}")
-    st.write(f"总得分平均值: {average_total_score:.2f}")
-    st.write(f"主队和客队平均得分差异: {average_score_diff:.2f}")
+# 计算赔率
+results_odds = calculate_odds(results_analysis)
+home_goals_odds = calculate_odds(home_goals_analysis)
+away_goals_odds = calculate_odds(away_goals_analysis)
+total_goals_odds = calculate_odds(total_goals_analysis)
+match_scores_odds = calculate_odds(match_scores_analysis).nlargest(10, '百分比')
 
-    st.write(f"\n主队投注回报率: {bet_home_roi:.2f}%")
-    st.write(f"客队投注回报率: {bet_away_roi:.2f}%")
+# 可视化分析
+st.header("可视化分析")
 
-    if use_quarter_scores:
-        # 显示各节模拟概率最大的平均得分与失分的表格
-        quarter_scores_df = pd.DataFrame({
-            '节次': ['第一节', '第二节', '第三节', '第四节'],
-            '主队得分': [np.mean(home_team_scores_q1), np.mean(home_team_scores_q2), np.mean(home_team_scores_q3), np.mean(home_team_scores_q4)],
-            '客队得分': [np.mean(away_team_scores_q1), np.mean(away_team_scores_q2), np.mean(away_team_scores_q3), np.mean(away_team_scores_q4)],
-            '总得分': [np.mean(total_scores_q1), np.mean(total_scores_q2), np.mean(total_scores_q3), np.mean(total_scores_q4)]
-        })
+st.subheader("比赛结果统计")
+st.write(results_odds)
 
-        st.subheader("各节比分统计")
-        st.write(quarter_scores_df)
+st.subheader("比赛结果分布图")
+fig, ax = plt.subplots()
+sns.barplot(x='比赛结果', y='次数', data=results_analysis, ax=ax)
+ax.set_xlabel('比赛结果')
+ax.set_ylabel('次数')
+ax.set_title('比赛结果分布图')
+st.pyplot(fig)
 
-        # 为每节得分进行直方图可视化
-        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("主队进球数统计")
+    st.write(home_goals_odds)
 
-        # 第一节
-        axs[0, 0].hist(total_scores_q1, bins=30, alpha=0.5, color='blue', label='第一节总得分')
-        axs[0, 0].set_title('第一节总得分分布', fontproperties=font)
-        axs[0, 0].set_xlabel('得分', fontproperties=font)
-        axs[0, 0].set_ylabel('频率', fontproperties=font)
-        axs[0, 0].legend(loc='upper right', prop=font)
-
-        # 第二节
-        axs[0, 1].hist(total_scores_q2, bins=30, alpha=0.5, color='green', label='第二节总得分')
-        axs[0, 1].set_title('第二节总得分分布', fontproperties=font)
-        axs[0, 1].set_xlabel('得分', fontproperties=font)
-        axs[0, 1].set_ylabel('频率', fontproperties=font)
-        axs[0, 1].legend(loc='upper right', prop=font)
-
-        # 第三节
-        axs[1, 0].hist(total_scores_q3, bins=30, alpha=0.5, color='red', label='第三节总得分')
-        axs[1, 0].set_title('第三节总得分分布', fontproperties=font)
-        axs[1, 0].set_xlabel('得分', fontproperties=font)
-        axs[1, 0].set_ylabel('频率', fontproperties=font)
-        axs[1, 0].legend(loc='upper right', prop=font)
-
-        # 第四节
-        axs[1, 1].hist(total_scores_q4, bins=30, alpha=0.5, color='purple', label='第四节总得分')
-        axs[1, 1].set_title('第四节总得分分布', fontproperties=font)
-        axs[1, 1].set_xlabel('得分', fontproperties=font)
-        axs[1, 1].set_ylabel('频率', fontproperties=font)
-        axs[1, 1].legend(loc='upper right', prop=font)
-
-        plt.tight_layout()
-        st.pyplot(fig)
-
-    # 总得分的直方图
+    st.subheader("主队进球数分布图")
     fig, ax = plt.subplots()
-    ax.hist(total_scores, bins=30, alpha=0.5, label='总得分')
-    ax.axvline(x=over_under_line, color='r', linestyle='dashed', linewidth=2, label='大小分线')
-    ax.axvline(x=average_total_score, color='g', linestyle='dashed', linewidth=2, label='总得分平均值')
-    ax.set_xlabel('总得分', fontproperties=font)
-    ax.set_ylabel('频率', fontproperties=font)
-    ax.set_title('篮球比赛的蒙特卡洛模拟', fontproperties=font)
-    ax.legend(loc='upper right', prop=font)
+    sns.histplot(home_goals_list, bins=range(int(home_goals_list.max()) + 1), kde=True, ax=ax)
+    ax.set_xlabel('进球数')
+    ax.set_ylabel('频率')
+    ax.set_title('主队进球数分布图')
     st.pyplot(fig)
 
-    # 可视化让分结果
+with col2:
+    st.subheader("客队进球数统计")
+    st.write(away_goals_odds)
+
+    st.subheader("客队进球数分布图")
     fig, ax = plt.subplots()
-    score_diff = home_team_scores - away_team_scores
-    ax.hist(score_diff, bins=30, alpha=0.5, label='得分差异 (主队 - 客队)')
-    ax.axvline(x=spread, color='r', linestyle='dashed', linewidth=2, label='让分线')
-    ax.axvline(x=average_score_diff, color='g', linestyle='dashed', linewidth=2, label='得分差异平均值')
-    ax.set_xlabel('得分差异', fontproperties=font)
-    ax.set_ylabel('频率', fontproperties=font)
-    ax.set_title('让分分析', fontproperties=font)
-    ax.legend(loc='upper right', prop=font)
+    sns.histplot(away_goals_list, bins=range(int(away_goals_list.max()) + 1), kde=True, ax=ax)
+    ax.set_xlabel('进球数')
+    ax.set_ylabel('频率')
+    ax.set_title('客队进球数分布图')
     st.pyplot(fig)
+
+st.subheader("总进球数统计")
+st.write(total_goals_odds)
+
+st.subheader("总进球数分布图")
+fig, ax = plt.subplots()
+sns.histplot(total_goals_list, bins=range(int(total_goals_list.max()) + 1), kde=True, ax=ax)
+ax.set_xlabel('总进球数')
+ax.set_ylabel('频率')
+ax.set_title('总进球数分布图')
+st.pyplot(fig)
+
+st.subheader("比分统计（前十）")
+st.write(match_scores_odds)
+
+st.subheader("比分分布图（前十）")
+fig, ax = plt.subplots(figsize=(10, 5))
+match_scores_analysis_filtered = match_scores_analysis.nlargest(10, '百分比')
+sns.barplot(x='比分', y='次数', data=match_scores_analysis_filtered, ax=ax)
+ax.set_xlabel('比分')
+ax.set_ylabel('次数')
+ax.set_title('比分分布图（前十）')
+st.pyplot(fig)
