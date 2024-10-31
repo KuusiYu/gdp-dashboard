@@ -1,151 +1,197 @@
 import streamlit as st
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties
+import os
 import pandas as pd
-import math
-from pathlib import Path
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+# 检查字体路径是否正确
+font_path = 'C:/Windows/Fonts/simsun.ttc'  # 例如，在Windows系统中使用宋体
+if not os.path.exists(font_path):
+    st.error("字体文件路径不正确，请检查并更改为有效路径")
+else:
+    font = FontProperties(fname=font_path)  # 加载字体文件
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+    # Streamlit应用程序标题
+    st.title("篮球比赛预测模拟器")
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+    # 在侧边栏添加用户输入
+    st.sidebar.title("输入参数")
+    
+    # 主队和客队整体平均得分与失分
+    home_team_avg_points_for = st.sidebar.number_input("主队近期场均得分", value=105.0, format="%.2f")
+    home_team_avg_points_against = st.sidebar.number_input("主队近期场均失分", value=99.0, format="%.2f")
+    away_team_avg_points_for = st.sidebar.number_input("客队近期场均得分", value=102.0, format="%.2f")
+    away_team_avg_points_against = st.sidebar.number_input("客队近期场均失分", value=101.0, format="%.2f")
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    # 增加开关来控制是否使用各节得分和失分进行预测
+    use_quarter_scores = st.sidebar.checkbox("使用各节得分和失分进行预测", value=True)
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    if use_quarter_scores:
+        # 主队和客队各节平均得分与失分
+        home_team_q1_avg_points_for = st.sidebar.number_input("主队第一节平均得分", value=26.0, format="%.2f")
+        home_team_q1_avg_points_against = st.sidebar.number_input("主队第一节平均失分", value=25.0, format="%.2f")
+        home_team_q2_avg_points_for = st.sidebar.number_input("主队第二节平均得分", value=27.0, format="%.2f")
+        home_team_q2_avg_points_against = st.sidebar.number_input("主队第二节平均失分", value=26.0, format="%.2f")
+        home_team_q3_avg_points_for = st.sidebar.number_input("主队第三节平均得分", value=27.0, format="%.2f")
+        home_team_q3_avg_points_against = st.sidebar.number_input("主队第三节平均失分", value=26.0, format="%.2f")
+        home_team_q4_avg_points_for = st.sidebar.number_input("主队第四节平均得分", value=25.0, format="%.2f")
+        home_team_q4_avg_points_against = st.sidebar.number_input("主队第四节平均失分", value=24.0, format="%.2f")
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+        away_team_q1_avg_points_for = st.sidebar.number_input("客队第一节平均得分", value=25.0, format="%.2f")
+        away_team_q1_avg_points_against = st.sidebar.number_input("客队第一节平均失分", value=26.0, format="%.2f")
+        away_team_q2_avg_points_for = st.sidebar.number_input("客队第二节平均得分", value=26.0, format="%.2f")
+        away_team_q2_avg_points_against = st.sidebar.number_input("客队第二节平均失分", value=27.0, format="%.2f")
+        away_team_q3_avg_points_for = st.sidebar.number_input("客队第三节平均得分", value=26.0, format="%.2f")
+        away_team_q3_avg_points_against = st.sidebar.number_input("客队第三节平均失分", value=27.0, format="%.2f")
+        away_team_q4_avg_points_for = st.sidebar.number_input("客队第四节平均得分", value=24.0, format="%.2f")
+        away_team_q4_avg_points_against = st.sidebar.number_input("客队第四节平均失分", value=25.0, format="%.2f")
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+    over_under_line = st.sidebar.number_input("大小分", value=210.5, format="%.2f")
+    spread = st.sidebar.number_input("让分 (主队让分)", value=-5.5, format="%.2f")
+    odds_home_team = st.sidebar.number_input("主队让分赔率", value=1.90, format="%.2f")
+    odds_away_team = st.sidebar.number_input("客队让分赔率", value=1.90, format="%.2f")
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    # 模拟次数
+    num_simulations = 700000
 
-    return gdp_df
+    if use_quarter_scores:
+        # 四节比赛的模拟得分
+        home_team_scores_q1 = np.random.normal(home_team_q1_avg_points_for, np.sqrt(np.abs(home_team_q1_avg_points_for - home_team_q1_avg_points_against)), num_simulations)
+        home_team_scores_q2 = np.random.normal(home_team_q2_avg_points_for, np.sqrt(np.abs(home_team_q2_avg_points_for - home_team_q2_avg_points_against)), num_simulations)
+        home_team_scores_q3 = np.random.normal(home_team_q3_avg_points_for, np.sqrt(np.abs(home_team_q3_avg_points_for - home_team_q3_avg_points_against)), num_simulations)
+        home_team_scores_q4 = np.random.normal(home_team_q4_avg_points_for, np.sqrt(np.abs(home_team_q4_avg_points_for - home_team_q4_avg_points_against)), num_simulations)
+        away_team_scores_q1 = np.random.normal(away_team_q1_avg_points_for, np.sqrt(np.abs(away_team_q1_avg_points_for - away_team_q1_avg_points_against)), num_simulations)
+        away_team_scores_q2 = np.random.normal(away_team_q2_avg_points_for, np.sqrt(np.abs(away_team_q2_avg_points_for - away_team_q2_avg_points_against)), num_simulations)
+        away_team_scores_q3 = np.random.normal(away_team_q3_avg_points_for, np.sqrt(np.abs(away_team_q3_avg_points_for - away_team_q3_avg_points_against)), num_simulations)
+        away_team_scores_q4 = np.random.normal(away_team_q4_avg_points_for, np.sqrt(np.abs(away_team_q4_avg_points_for - away_team_q4_avg_points_against)), num_simulations)
 
-gdp_df = get_gdp_data()
+        # 合并四节得分
+        home_team_scores = home_team_scores_q1 + home_team_scores_q2 + home_team_scores_q3 + home_team_scores_q4
+        away_team_scores = away_team_scores_q1 + away_team_scores_q2 + away_team_scores_q3 + away_team_scores_q4
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+        # 计算各节总得分
+        total_scores_q1 = home_team_scores_q1 + away_team_scores_q1
+        total_scores_q2 = home_team_scores_q2 + away_team_scores_q2
+        total_scores_q3 = home_team_scores_q3 + away_team_scores_q3
+        total_scores_q4 = home_team_scores_q4 + away_team_scores_q4
+    else:
+        # 使用整体平均得分和失分进行模拟
+        home_team_scores = np.random.normal(home_team_avg_points_for, np.sqrt(np.abs(home_team_avg_points_for - home_team_avg_points_against)), num_simulations)
+        away_team_scores = np.random.normal(away_team_avg_points_for, np.sqrt(np.abs(away_team_avg_points_for - away_team_avg_points_against)), num_simulations)
+    
+    total_scores = home_team_scores + away_team_scores
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+    # 计算胜负
+    home_team_wins = np.sum(home_team_scores > away_team_scores)
+    away_team_wins = np.sum(home_team_scores < away_team_scores)
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+    # 计算覆盖情况
+    over_hits = np.sum(total_scores > over_under_line)
+    under_hits = np.sum(total_scores < over_under_line)
+    spread_hits_home_team = np.sum((home_team_scores - away_team_scores) > spread)
+    spread_hits_away_team = np.sum((home_team_scores - away_team_scores) < spread)
 
-# Add some spacing
-''
-''
+    # 计算平均得分
+    average_home_team_score = np.mean(home_team_scores)
+    average_away_team_score = np.mean(away_team_scores)
+    average_total_score = np.mean(total_scores)
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+    # 计算净得分差异
+    average_score_diff = average_home_team_score - average_away_team_score
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+    # 计算投注回报率
+    if spread_hits_home_team / num_simulations > 1 / odds_home_team:
+        bet_home_roi = (spread_hits_home_team / num_simulations * odds_home_team - 1) * 100
+    else:
+        bet_home_roi = (spread_hits_home_team / num_simulations * odds_home_team - 1) * 100
+    
+    if spread_hits_away_team / num_simulations > 1 / odds_away_team:
+        bet_away_roi = (spread_hits_away_team / num_simulations * odds_away_team - 1) * 100
+    else:
+        bet_away_roi = (spread_hits_away_team / num_simulations * odds_away_team - 1) * 100
 
-countries = gdp_df['Country Code'].unique()
+    # 打印结果
+    st.write(f"主队获胜概率: {home_team_wins / num_simulations * 100:.2f}%")
+    st.write(f"客队获胜概率: {away_team_wins / num_simulations * 100:.2f}%")
+    st.write(f"大于大小分的概率: {over_hits / num_simulations * 100:.2f}%")
+    st.write(f"小于大小分的概率: {under_hits / num_simulations * 100:.2f}%")
+    st.write(f"主队赢得让分的概率: {spread_hits_home_team / num_simulations * 100:.2f}%")
+    st.write(f"客队赢得让分的概率: {spread_hits_away_team / num_simulations * 100:.2f}%")
 
-if not len(countries):
-    st.warning("Select at least one country")
+    st.write(f"\n主队平均得分: {average_home_team_score:.2f}")
+    st.write(f"客队平均得分: {average_away_team_score:.2f}")
+    st.write(f"总得分平均值: {average_total_score:.2f}")
+    st.write(f"主队和客队平均得分差异: {average_score_diff:.2f}")
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
+    st.write(f"\n主队投注回报率: {bet_home_roi:.2f}%")
+    st.write(f"客队投注回报率: {bet_away_roi:.2f}%")
 
-''
-''
-''
+    if use_quarter_scores:
+        # 显示各节模拟概率最大的平均得分与失分的表格
+        quarter_scores_df = pd.DataFrame({
+            '节次': ['第一节', '第二节', '第三节', '第四节'],
+            '主队得分': [np.mean(home_team_scores_q1), np.mean(home_team_scores_q2), np.mean(home_team_scores_q3), np.mean(home_team_scores_q4)],
+            '客队得分': [np.mean(away_team_scores_q1), np.mean(away_team_scores_q2), np.mean(away_team_scores_q3), np.mean(away_team_scores_q4)],
+            '总得分': [np.mean(total_scores_q1), np.mean(total_scores_q2), np.mean(total_scores_q3), np.mean(total_scores_q4)]
+        })
 
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
+        st.subheader("各节比分统计")
+        st.write(quarter_scores_df)
 
-st.header('GDP over time', divider='gray')
+        # 为每节得分进行直方图可视化
+        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
 
-''
+        # 第一节
+        axs[0, 0].hist(total_scores_q1, bins=30, alpha=0.5, color='blue', label='第一节总得分')
+        axs[0, 0].set_title('第一节总得分分布', fontproperties=font)
+        axs[0, 0].set_xlabel('得分', fontproperties=font)
+        axs[0, 0].set_ylabel('频率', fontproperties=font)
+        axs[0, 0].legend(loc='upper right', prop=font)
 
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
+        # 第二节
+        axs[0, 1].hist(total_scores_q2, bins=30, alpha=0.5, color='green', label='第二节总得分')
+        axs[0, 1].set_title('第二节总得分分布', fontproperties=font)
+        axs[0, 1].set_xlabel('得分', fontproperties=font)
+        axs[0, 1].set_ylabel('频率', fontproperties=font)
+        axs[0, 1].legend(loc='upper right', prop=font)
 
-''
-''
+        # 第三节
+        axs[1, 0].hist(total_scores_q3, bins=30, alpha=0.5, color='red', label='第三节总得分')
+        axs[1, 0].set_title('第三节总得分分布', fontproperties=font)
+        axs[1, 0].set_xlabel('得分', fontproperties=font)
+        axs[1, 0].set_ylabel('频率', fontproperties=font)
+        axs[1, 0].legend(loc='upper right', prop=font)
 
+        # 第四节
+        axs[1, 1].hist(total_scores_q4, bins=30, alpha=0.5, color='purple', label='第四节总得分')
+        axs[1, 1].set_title('第四节总得分分布', fontproperties=font)
+        axs[1, 1].set_xlabel('得分', fontproperties=font)
+        axs[1, 1].set_ylabel('频率', fontproperties=font)
+        axs[1, 1].legend(loc='upper right', prop=font)
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+        plt.tight_layout()
+        st.pyplot(fig)
 
-st.header(f'GDP in {to_year}', divider='gray')
+    # 总得分的直方图
+    fig, ax = plt.subplots()
+    ax.hist(total_scores, bins=30, alpha=0.5, label='总得分')
+    ax.axvline(x=over_under_line, color='r', linestyle='dashed', linewidth=2, label='大小分线')
+    ax.axvline(x=average_total_score, color='g', linestyle='dashed', linewidth=2, label='总得分平均值')
+    ax.set_xlabel('总得分', fontproperties=font)
+    ax.set_ylabel('频率', fontproperties=font)
+    ax.set_title('篮球比赛的蒙特卡洛模拟', fontproperties=font)
+    ax.legend(loc='upper right', prop=font)
+    st.pyplot(fig)
 
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+    # 可视化让分结果
+    fig, ax = plt.subplots()
+    score_diff = home_team_scores - away_team_scores
+    ax.hist(score_diff, bins=30, alpha=0.5, label='得分差异 (主队 - 客队)')
+    ax.axvline(x=spread, color='r', linestyle='dashed', linewidth=2, label='让分线')
+    ax.axvline(x=average_score_diff, color='g', linestyle='dashed', linewidth=2, label='得分差异平均值')
+    ax.set_xlabel('得分差异', fontproperties=font)
+    ax.set_ylabel('频率', fontproperties=font)
+    ax.set_title('让分分析', fontproperties=font)
+    ax.legend(loc='upper right', prop=font)
+    st.pyplot(fig)
