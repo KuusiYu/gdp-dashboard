@@ -3,9 +3,11 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib import rcParams
 
-plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置字体为黑体
-plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+# 检查字体是否可用
+rcParams['font.sans-serif'] = ['SimHei'] 
+rcParams['axes.unicode_minus'] = False
 
 # Elo rating functions
 def initialize_elo(team_names):
@@ -66,17 +68,39 @@ def calculate_odds(stats):
     stats['赔率'] = 100 / stats['百分比']
     return stats
 
+# Function to calculate handicap results
+def calculate_handicap(home_goals, away_goals, handicap):
+    if home_goals + handicap > away_goals:
+        return '胜'
+    elif home_goals + handicap < away_goals:
+        return '负'
+    else:
+        return '平'
+
+# Calculate handicap results and analyze
+def analyze_handicaps(handicaps, home_goals_list, away_goals_list):
+    handicap_results = {}
+    
+    for handicap in handicaps:
+        results = [calculate_handicap(home_goals, away_goals, handicap) for home_goals, away_goals in zip(home_goals_list, away_goals_list)]
+        results_analysis = analyze_data(pd.Series(results), f'盘口为{handicap}的结果')
+        results_odds = calculate_odds(results_analysis)
+        handicap_results[handicap] = results_odds
+    
+    return handicap_results
+
 # Streamlit application
 st.title('足球比赛模拟器')
 
 # 在侧边栏添加用户输入
 st.sidebar.title("输入参数")
-home_avg_goals = st.sidebar.number_input('主队场均进球', value= 1.0, format="%.1f")
-away_avg_goals = st.sidebar.number_input('客队场均进球', value= 1.0, format="%.1f")
-home_avg_conceded = st.sidebar.number_input('主队场均失球', value= 1.0, format="%.1f")
-away_avg_conceded = st.sidebar.number_input('客队场均失球', value= 1.0, format="%.1f")
+home_avg_goals = st.sidebar.number_input('主队场均进球', value=1.0, format="%.1f")
+away_avg_goals = st.sidebar.number_input('客队场均进球', value=1.0, format="%.1f")
+home_avg_conceded = st.sidebar.number_input('主队场均失球', value=1.0, format="%.1f")
+away_avg_conceded = st.sidebar.number_input('客队场均失球', value=1.0, format="%.1f")
 correlation = st.sidebar.slider('进球相关性', 0.0, 1.0, 0.8)
 n_simulations = st.sidebar.number_input('模拟次数', value=500000, step=10000)
+selected_handicap = st.sidebar.select_slider('选择盘口', options=np.arange(-5, 5, 0.25), value=0.0)
 
 # 模拟数据
 weather_factors = np.random.normal(1.0, 0.1, n_simulations)
@@ -172,4 +196,17 @@ sns.barplot(x='比分', y='次数', data=match_scores_analysis_filtered, ax=ax)
 ax.set_xlabel('比分')
 ax.set_ylabel('次数')
 ax.set_title('比分分布图（前十）')
+st.pyplot(fig)
+
+# Output the selected handicap result
+st.subheader(f"盘口为 {selected_handicap} 的结果统计")
+handicap_results = analyze_handicaps([selected_handicap], home_goals_list, away_goals_list)[selected_handicap]
+st.write(handicap_results)
+
+st.subheader(f"盘口为 {selected_handicap} 的结果分布图")
+fig, ax = plt.subplots()
+sns.barplot(x=f'盘口为{selected_handicap}的结果', y='次数', data=handicap_results, ax=ax)
+ax.set_xlabel('比赛结果')
+ax.set_ylabel('次数')
+ax.set_title(f'盘口为 {selected_handicap} 的结果分布图')
 st.pyplot(fig)
