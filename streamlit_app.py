@@ -1,13 +1,6 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from matplotlib import rcParams
-
-# 检查字体是否可用
-rcParams['font.sans-serif'] = ['SimHei'] 
-rcParams['axes.unicode_minus'] = False
 
 # Elo rating functions
 def initialize_elo(team_names):
@@ -100,7 +93,7 @@ home_avg_conceded = st.sidebar.number_input('主队场均失球', value=1.0, for
 away_avg_conceded = st.sidebar.number_input('客队场均失球', value=1.0, format="%.1f")
 correlation = st.sidebar.slider('进球相关性', 0.0, 1.0, 0.8)
 n_simulations = st.sidebar.number_input('模拟次数', value=500000, step=10000)
-selected_handicap = st.sidebar.select_slider('选择盘口', options=np.arange(-5, 5, 0.25), value=0.0)
+selected_handicap = st.sidebar.select_slider('选择盘口', options=np.arange(-5, 5.5, 0.25), value=0.0)
 
 # 模拟数据
 weather_factors = np.random.normal(1.0, 0.1, n_simulations)
@@ -136,77 +129,23 @@ away_goals_odds = calculate_odds(away_goals_analysis)
 total_goals_odds = calculate_odds(total_goals_analysis)
 match_scores_odds = calculate_odds(match_scores_analysis).nlargest(10, '百分比')
 
-# 可视化分析
-st.header("可视化分析")
-
-st.subheader("比赛结果统计")
+# 输出表格
+st.header("比赛结果统计")
 st.write(results_odds)
 
-st.subheader("比赛结果分布图")
-fig, ax = plt.subplots()
-sns.barplot(x='比赛结果', y='次数', data=results_analysis, ax=ax)
-ax.set_xlabel('比赛结果')
-ax.set_ylabel('次数')
-ax.set_title('比赛结果分布图')
-st.pyplot(fig)
+st.header("主队进球数统计")
+st.write(home_goals_odds)
 
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("主队进球数统计")
-    st.write(home_goals_odds)
+st.header("客队进球数统计")
+st.write(away_goals_odds)
 
-    st.subheader("主队进球数分布图")
-    fig, ax = plt.subplots()
-    sns.histplot(home_goals_list, bins=range(int(home_goals_list.max()) + 1), kde=True, ax=ax)
-    ax.set_xlabel('进球数')
-    ax.set_ylabel('频率')
-    ax.set_title('主队进球数分布图')
-    st.pyplot(fig)
-
-with col2:
-    st.subheader("客队进球数统计")
-    st.write(away_goals_odds)
-
-    st.subheader("客队进球数分布图")
-    fig, ax = plt.subplots()
-    sns.histplot(away_goals_list, bins=range(int(away_goals_list.max()) + 1), kde=True, ax=ax)
-    ax.set_xlabel('进球数')
-    ax.set_ylabel('频率')
-    ax.set_title('客队进球数分布图')
-    st.pyplot(fig)
-
-st.subheader("总进球数统计")
+st.header("总进球数统计")
 st.write(total_goals_odds)
 
-st.subheader("总进球数分布图")
-fig, ax = plt.subplots()
-sns.histplot(total_goals_list, bins=range(int(total_goals_list.max()) + 1), kde=True, ax=ax)
-ax.set_xlabel('总进球数')
-ax.set_ylabel('频率')
-ax.set_title('总进球数分布图')
-st.pyplot(fig)
-
-st.subheader("比分统计（前十）")
+st.header("比分统计（前十）")
 st.write(match_scores_odds)
 
-st.subheader("比分分布图（前十）")
-fig, ax = plt.subplots(figsize=(10, 5))
-match_scores_analysis_filtered = match_scores_analysis.nlargest(10, '百分比')
-sns.barplot(x='比分', y='次数', data=match_scores_analysis_filtered, ax=ax)
-ax.set_xlabel('比分')
-ax.set_ylabel('次数')
-ax.set_title('比分分布图（前十）')
-st.pyplot(fig)
-
-# Output the selected handicap result
-st.subheader(f"盘口为 {selected_handicap} 的结果统计")
+# Handicap analysis table
+st.header(f"盘口为 {selected_handicap} 的结果统计")
 handicap_results = analyze_handicaps([selected_handicap], home_goals_list, away_goals_list)[selected_handicap]
 st.write(handicap_results)
-
-st.subheader(f"盘口为 {selected_handicap} 的结果分布图")
-fig, ax = plt.subplots()
-sns.barplot(x=f'盘口为{selected_handicap}的结果', y='次数', data=handicap_results, ax=ax)
-ax.set_xlabel('比赛结果')
-ax.set_ylabel('次数')
-ax.set_title(f'盘口为 {selected_handicap} 的结果分布图')
-st.pyplot(fig)
