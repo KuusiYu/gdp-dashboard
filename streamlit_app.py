@@ -2,67 +2,24 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 
-# Elo rating functions
-def initialize_elo(team_names):
-    return {team: 1500 for team in team_names}
+# 计算凯利指数
+def calculate_kelly(probability, odds):
+    kelly_index = (probability * (odds - 1) - (1 - probability)) / (odds - 1)
+    return np.maximum(0, kelly_index)
 
-def calculate_elo(current_elo, opponent_elo, result, k=32):
-    expected_score = 1 / (1 + 10 ** ((opponent_elo - current_elo) / 400))
-    new_elo = current_elo + k * (result - expected_score)
-    return new_elo
-
-def update_elo(elo_ratings, match_results):
-    for match in match_results:
-        home_team, away_team, result = match
-        if result == '胜':
-            home_result, away_result = 1, 0
-        elif result == '平':
-            home_result, away_result = 0.5, 0.5
-        else:
-            home_result, away_result = 0, 1
-        
-        elo_ratings[home_team] = calculate_elo(elo_ratings[home_team], elo_ratings[away_team], home_result)
-        elo_ratings[away_team] = calculate_elo(elo_ratings[away_team], elo_ratings[home_team], away_result)
-    
-    return elo_ratings
-
-# Function to simulate handicap data
-def simulate_handicap_data(n_samples=1000):
-    np.random.seed(42)
-    features = {
-        'feature1': np.random.randn(n_samples),
-        'feature2': np.random.randn(n_samples),
-        'feature3': np.random.randn(n_samples),
-    }
-    target = np.random.choice([0, 1], size=n_samples)
-    data = pd.DataFrame(features)
-    data['result'] = target
-    return data
-
-# Function to estimate average goals
-def estimate_avg_goals(goals, conceded, home_avg_goals, away_avg_goals, home_avg_conceded, away_avg_conceded, correlation):
-    avg_goals = (np.mean(goals) + home_avg_goals) * correlation
-    avg_conceded = (np.mean(conceded) + away_avg_conceded) * correlation
-    return avg_goals, avg_conceded
-
-# Function to generate scores
+# 模拟数据生成函数
 def generate_scores(avg_goals, size, factors):
     adjusted_goals = avg_goals * factors
     return np.random.poisson(adjusted_goals, size)
 
-# Function to analyze data
+# 分析数据来计算次数和百分比
 def analyze_data(data, column_name):
     counts = data.value_counts()
-    percentages = data.value_counts(normalize=True) * 100
+    percentages = 100 * data.value_counts(normalize=True)
     return pd.DataFrame({column_name: counts.index, '次数': counts.values, '百分比': percentages.values})
 
-# Function to calculate odds
-def calculate_odds(stats):
-    stats['赔率'] = 100 / stats['百分比']
-    return stats
-
-# Function to calculate handicap results
-def calculate_handicap(home_goals, away_goals, handicap):
+# 计算比赛的盘口结果
+def calculate_handicap_result(home_goals, away_goals, handicap):
     if home_goals + handicap > away_goals:
         return '胜'
     elif home_goals + handicap < away_goals:
@@ -70,30 +27,43 @@ def calculate_handicap(home_goals, away_goals, handicap):
     else:
         return '平'
 
-# Calculate handicap results and analyze
-def analyze_handicaps(handicaps, home_goals_list, away_goals_list):
-    handicap_results = {}
-    
-    for handicap in handicaps:
-        results = [calculate_handicap(home_goals, away_goals, handicap) for home_goals, away_goals in zip(home_goals_list, away_goals_list)]
-        results_analysis = analyze_data(pd.Series(results), f'盘口为{handicap}的结果')
-        results_odds = calculate_odds(results_analysis)
-        handicap_results[handicap] = results_odds
-    
-    return handicap_results
+# 计算大小球盘口结果
+def calculate_over_under_result(total_goals, threshold):
+    if total_goals > threshold:
+        return '大'
+    elif total_goals < threshold:
+        return '小'
+    else:
+        return '平'
 
-# Streamlit application
+def analyze_handicaps(selected_handicap, home_goals_list, away_goals_list):
+    results = [calculate_handicap_result(home_goals, away_goals, selected_handicap) 
+               for home_goals, away_goals in zip(home_goals_list, away_goals_list)]
+    results_analysis = analyze_data(pd.Series(results), '比赛结果')
+    return results_analysis
+
+def analyze_over_under(selected_threshold, total_goals_list):
+    results = [calculate_over_under_result(total_goals, selected_threshold) 
+               for total_goals in total_goals_list]
+    results_analysis = analyze_data(pd.Series(results), '大小球结果')
+    return results_analysis
+
+# Streamlit应用
 st.title('足球比赛模拟器')
 
-# 在侧边栏添加用户输入
+# 输入参数
 st.sidebar.title("输入参数")
-home_avg_goals = st.sidebar.number_input('主队场均进球', value=1.0, format="%.1f")
-away_avg_goals = st.sidebar.number_input('客队场均进球', value=1.0, format="%.1f")
-home_avg_conceded = st.sidebar.number_input('主队场均失球', value=1.0, format="%.1f")
-away_avg_conceded = st.sidebar.number_input('客队场均失球', value=1.0, format="%.1f")
-correlation = st.sidebar.slider('进球相关性', 0.0, 1.0, 0.8)
-n_simulations = st.sidebar.number_input('模拟次数', value=500000, step=10000)
-selected_handicap = st.sidebar.select_slider('选择盘口', options=np.arange(-5, 5.5, 0.25), value=0.0)
+home_avg_goals = st.sidebar.number_input('主队场均进球', value=1.5, format="%.1f")
+away_avg_goals = st.sidebar.number_input('客队场均进球', value=1.2, format="%.1f")
+home_avg_conceded = st.sidebar.number_input('主队场均失球', value=1.1, format="%.1f")
+away_avg_conceded = st.sidebar.number_input('客队场均失球', value=1.3, format="%.1f")
+n_simulations = st.sidebar.number_input('模拟次数', value=7500, step=100)
+
+selected_handicap = st.sidebar.slider('选择让球盘口', -5.0, 5.5, 0.0, step=0.25)
+handicap_odds = st.sidebar.slider('让球盘口赔率', 1.0, 5.0, 2.0)
+
+selected_ou_threshold = st.sidebar.slider('选择大小球盘口', 0.0, 10.5, 2.5, step=0.25)
+ou_odds = st.sidebar.slider('大小球盘口赔率', 1.0, 5.0, 2.0)
 
 # 模拟数据
 weather_factors = np.random.normal(1.0, 0.1, n_simulations)
@@ -104,48 +74,64 @@ card_factors = np.random.normal(1.0, 0.05, n_simulations)
 home_goals_list = generate_scores(home_avg_goals, n_simulations, weather_factors * team_factors * home_away_factors * card_factors)
 away_goals_list = generate_scores(away_avg_goals, n_simulations, weather_factors * team_factors / home_away_factors * card_factors)
 
-# 计算比赛结果
+# 计算统计数据
+total_goals_list = home_goals_list + away_goals_list
+match_scores_list = [f"{hg}-{ag}" for hg, ag in zip(home_goals_list, away_goals_list)]
 match_results = np.where(home_goals_list > away_goals_list, '胜', np.where(home_goals_list < away_goals_list, '负', '平'))
 
-# 分析比赛结果
+# 获取自动计算的盘口概率
+handicap_results_analysis = analyze_handicaps(selected_handicap, home_goals_list, away_goals_list)
+handicap_prob = handicap_results_analysis.loc[handicap_results_analysis['比赛结果'] == '胜', '百分比'].sum()
+
+ou_results_analysis = analyze_over_under(selected_ou_threshold, total_goals_list)
+ou_prob = ou_results_analysis.loc[ou_results_analysis['大小球结果'] == '大', '百分比'].sum()
+
+# 添加赔率和凯利指数
+handicap_results_analysis['赔率'] = 100.0 / handicap_results_analysis['百分比']
+handicap_results_analysis['凯利指数'] = calculate_kelly(handicap_results_analysis['百分比'] / 100, handicap_odds)
+
+ou_results_analysis['赔率'] = 100.0 / ou_results_analysis['百分比']
+ou_results_analysis['凯利指数'] = calculate_kelly(ou_results_analysis['百分比'] / 100, ou_odds)
+
+# 结果分析展示
 results_analysis = analyze_data(pd.Series(match_results), '比赛结果')
-
-# 计算总进球数
-total_goals_list = home_goals_list + away_goals_list
-
-# 计算比分
-match_scores_list = [f"{hg}-{ag}" for hg, ag in zip(home_goals_list, away_goals_list)]
-
-# 分析结果
 home_goals_analysis = analyze_data(pd.Series(home_goals_list), '进球数')
 away_goals_analysis = analyze_data(pd.Series(away_goals_list), '进球数')
 total_goals_analysis = analyze_data(pd.Series(total_goals_list), '总进球数')
 match_scores_analysis = analyze_data(pd.Series(match_scores_list), '比分')
 
-# 计算赔率
-results_odds = calculate_odds(results_analysis)
-home_goals_odds = calculate_odds(home_goals_analysis)
-away_goals_odds = calculate_odds(away_goals_analysis)
-total_goals_odds = calculate_odds(total_goals_analysis)
-match_scores_odds = calculate_odds(match_scores_analysis).nlargest(10, '百分比')
-
-# 输出表格
+# 显示比赛结果统计
 st.header("比赛结果统计")
-st.write(results_odds)
+st.dataframe(results_analysis)
 
 st.header("主队进球数统计")
-st.write(home_goals_odds)
+st.dataframe(home_goals_analysis)
 
 st.header("客队进球数统计")
-st.write(away_goals_odds)
+st.dataframe(away_goals_analysis)
 
 st.header("总进球数统计")
-st.write(total_goals_odds)
+st.dataframe(total_goals_analysis)
 
 st.header("比分统计（前十）")
-st.write(match_scores_odds)
+st.dataframe(match_scores_analysis.nlargest(10, '百分比'))
 
-# Handicap analysis table
-st.header(f"盘口为 {selected_handicap} 的结果统计")
-handicap_results = analyze_handicaps([selected_handicap], home_goals_list, away_goals_list)[selected_handicap]
-st.write(handicap_results)
+st.header(f"盘口为 {selected_handicap} 的让球盘口统计")
+st.dataframe(handicap_results_analysis.style.highlight_max(axis=0, subset=['凯利指数'], color='lightgreen'))
+
+st.header(f"大小球盘口为 {selected_ou_threshold} 的统计")
+st.dataframe(ou_results_analysis.style.highlight_max(axis=0, subset=['凯利指数'], color='lightgreen'))
+
+# 自定义凯利指数计算器
+st.sidebar.header("自定义凯利指数计算器")
+prob_input = st.sidebar.slider("自定义概率", 0.0, 1.0, 0.5)
+odds_input = st.sidebar.number_input("自定义赔率", value=2.0, step=0.1)
+kelly_result = calculate_kelly(prob_input, odds_input)
+st.sidebar.write(f"计算得出的凯利指数: {kelly_result:.2f}")
+
+if kelly_result > 0.1:
+    st.sidebar.success("凯利指数显示，此下注可能有利可图。")
+elif kelly_result > 0:
+    st.sidebar.info("凯利指数较低，风险较大。")
+else:
+    st.sidebar.error("不建议下注。凯利指数为零。")
