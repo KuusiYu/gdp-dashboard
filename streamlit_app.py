@@ -57,13 +57,13 @@ home_avg_goals = st.sidebar.number_input('主队场均进球', value=1.5, format
 away_avg_goals = st.sidebar.number_input('客队场均进球', value=1.2, format="%.1f")
 home_avg_conceded = st.sidebar.number_input('主队场均失球', value=1.1, format="%.1f")
 away_avg_conceded = st.sidebar.number_input('客队场均失球', value=1.3, format="%.1f")
-n_simulations = st.sidebar.number_input('模拟次数', value=750000, step=100)
+n_simulations = st.sidebar.number_input('模拟次数', value=70000, step=1000)
 
 selected_handicap = st.sidebar.slider('选择让球盘口', -5.0, 5.5, 0.0, step=0.25)
-handicap_odds = st.sidebar.slider('让球盘口赔率', 1.0, 5.0, 2.0)
+handicap_odds = st.sidebar.slider('让球盘口赔率', 1.0, 3.0, 2.0)
 
-selected_ou_threshold = st.sidebar.slider('选择大小球盘口', 0.0, 10.5, 2.5, step=0.25)
-ou_odds = st.sidebar.slider('大小球盘口赔率', 1.0, 5.0, 2.0)
+selected_ou_threshold = st.sidebar.slider('选择大小球盘口', 0.0, 5.5, 2.5, step=0.25)
+ou_odds = st.sidebar.slider('大小球盘口赔率', 1.0, 3.0, 2.0)
 
 # 模拟数据
 weather_factors = np.random.normal(1.0, 0.1, n_simulations)
