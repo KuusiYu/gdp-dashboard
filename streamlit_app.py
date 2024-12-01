@@ -130,7 +130,7 @@ def highlight_max(s):
                 styles.iat[i, j] = 'background-color: white'  # 非数字保持白色
     return styles
 
-st.title('⚽ 足球比赛进球数预测')
+st.title('预测仅供参考')
 
 st.sidebar.title("输入参数设置")
 
