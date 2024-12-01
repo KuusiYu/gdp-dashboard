@@ -7,3 +7,4 @@ seaborn
 requests
 scikit-learn
 scipy
+Statsmodels
