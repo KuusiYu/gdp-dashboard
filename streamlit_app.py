@@ -121,7 +121,7 @@ def calculate_odds(win_prob, draw_prob, loss_prob):
 def highlight_max(s):
     return ['background-color: rgba(255, 0, 0, 0.2)' if v == 0 else f'background-color: rgba(255, 0, 0, {v:.2f})' for v in s]
 
-st.title('⚽ 足球比赛进球数预测')
+st.title('预测结果仅供参考')
 
 st.sidebar.title("输入参数设置")
 
