@@ -3,7 +3,7 @@ streamlit
 numpy
 matplotlib
 pandas
-# seaborn
-
-# Note: This application requires a Chinese font (e.g., SimSun or Microsoft YaHei).
-# Ensure that such a font is installed on the system.
+seaborn
+requests
+scikit-learn
+scipy
