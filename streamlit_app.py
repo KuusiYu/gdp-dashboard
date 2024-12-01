@@ -6,8 +6,6 @@ import requests
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
 from statsmodels.api import GLM, families
 from scipy.stats import poisson
 
@@ -119,9 +117,20 @@ def calculate_odds(win_prob, draw_prob, loss_prob):
     return home_odds, draw_odds, away_odds
 
 def highlight_max(s):
-    return ['background-color: rgba(255, 0, 0, 0.2)' if v == 0 else f'background-color: rgba(255, 0, 0, {v:.2f})' for v in s]
+    # 创建样式 DataFrame
+    styles = pd.DataFrame('', index=s.index, columns=s.columns)
+    for i in range(s.shape[0]):
+        for j in range(s.shape[1]):
+            if isinstance(s.iloc[i, j], (int, float)):  # 检查每个值是否为数字
+                if s.iloc[i, j] > 0:
+                    styles.iat[i, j] = f'background-color: rgba(255, 0, 0, {s.iloc[i, j]:.2f})'  # 使用概率值定义颜色深度
+                else:
+                    styles.iat[i, j] = 'background-color: rgba(255, 0, 0, 0.2)'  # 当概率为0时设置为浅色
+            else:
+                styles.iat[i, j] = 'background-color: white'  # 非数字保持白色
+    return styles
 
-st.title('预测结果仅供参考')
+st.title('⚽ 足球比赛进球数预测')
 
 st.sidebar.title("输入参数设置")
 
@@ -187,12 +196,24 @@ if leagues:
                                                 index=[f'主队进球数 {i}' for i in range(len(home_goals_prob))])
             total_goals_prob_df['总进球数概率'] = total_goals_prob
             
-            # 设置样式以根据概率的大小改变背景色
-            def highlight_probabilities(df):
-                return df.style.apply(highlight_max, subset=pd.IndexSlice[:, df.columns[:-1]])
-
             st.write("比分统计表 (概率越大，颜色越深):")
-            st.dataframe(highlight_probabilities(total_goals_prob_df))
+            styled_table = total_goals_prob_df.style.apply(highlight_max, axis=None)  # 用于整张表格
+            st.dataframe(styled_table)
+
+            # 显示主队、客队进球数的概率
+            st.header("⚽ 各队进球数概率")
+            st.subheader("主队进球数概率:")
+            for i, prob in enumerate(home_goals_prob):
+                st.write(f"进球数 {i}: 概率 {prob:.2%}")
+
+            st.subheader("客队进球数概率:")
+            for i, prob in enumerate(away_goals_prob):
+                st.write(f"进球数 {i}: 概率 {prob:.2%}")
+
+            st.subheader("主客队总进球数概率:")
+            total_goals_list = total_goals_prob.tolist()
+            for i, prob in enumerate(total_goals_list):
+                st.write(f"总进球数 {i}: 概率 {prob:.2%}")
 
             # 显示胜平负概率
             st.write("胜平负概率:")
