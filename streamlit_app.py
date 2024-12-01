@@ -6,7 +6,9 @@ import requests
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+from statsmodels.api import GLM, families
 from scipy.stats import poisson
 
 # 固定 API 密钥
@@ -84,7 +86,42 @@ def calculate_match_outcome_probabilities(home_goals_prob, away_goals_prob):
     away_win_prob = sum(away_goals_prob[j] * sum(home_goals_prob[i] for i in range(j)) for j in range(len(away_goals_prob)))  
     return home_win_prob, draw_prob, away_win_prob
 
-st.title('预测结果仅供参考')
+def train_models(home_history, away_history):
+    # 准备数据
+    home_goals = [goals for _, goals, _ in home_history]
+    away_goals = [goals for _, _, goals in away_history]
+    
+    # 创建特征矩阵（使用进球数作为特征示例）
+    X_home = np.arange(len(home_goals)).reshape(-1, 1)  # 基于历史进球数的索引
+    y_home = np.array(home_goals)
+
+    X_away = np.arange(len(away_goals)).reshape(-1, 1)  # 基于历史进球数的索引
+    y_away = np.array(away_goals)
+
+    # 拟合随机森林回归
+    rf_home = RandomForestRegressor(n_estimators=100)
+    rf_home.fit(X_home, y_home)
+
+    rf_away = RandomForestRegressor(n_estimators=100)
+    rf_away.fit(X_away, y_away)
+
+    # 拟合负二项回归
+    model_home = GLM(y_home, X_home, family=families.NegativeBinomial()).fit()
+    model_away = GLM(y_away, X_away, family=families.NegativeBinomial()).fit()
+
+    return rf_home, rf_away, model_home, model_away
+
+def calculate_odds(win_prob, draw_prob, loss_prob):
+    # 理论赔率 = 1 / 概率
+    home_odds = 1 / win_prob if win_prob > 0 else float('inf')
+    draw_odds = 1 / draw_prob if draw_prob > 0 else float('inf')
+    away_odds = 1 / loss_prob if loss_prob > 0 else float('inf')
+    return home_odds, draw_odds, away_odds
+
+def highlight_max(s):
+    return ['background-color: rgba(255, 0, 0, 0.2)' if v == 0 else f'background-color: rgba(255, 0, 0, {v:.2f})' for v in s]
+
+st.title('⚽ 足球比赛进球数预测')
 
 st.sidebar.title("输入参数设置")
 
@@ -109,40 +146,59 @@ if leagues:
             home_history = fetcher.get_team_history(home_team_id)
             away_history = fetcher.get_team_history(away_team_id)
 
-            home_avg_goals = np.mean([goals for _, goals, _ in home_history]) if home_history else 0
-            away_avg_goals = np.mean([goals for _, _, goals in away_history]) if away_history else 0
+            # 训练模型
+            rf_home, rf_away, model_home, model_away = train_models(home_history, away_history)
 
-            home_goals_prob = poisson_prediction(home_avg_goals, max_goals=5)
-            away_goals_prob = poisson_prediction(away_avg_goals, max_goals=5)
+            # 使用随机森林模型进行预测
+            home_goals_pred_rf = rf_home.predict(np.array([[len(home_history)]])).reshape(-1)[0]
+            away_goals_pred_rf = rf_away.predict(np.array([[len(away_history)]])).reshape(-1)[0]
+
+            # 使用负二项回归进行预测
+            home_goals_pred_nb = model_home.predict(np.array([[len(home_history)]]))
+            away_goals_pred_nb = model_away.predict(np.array([[len(away_history)]]))
+
+            # 计算平均预测进球数
+            home_avg_goals = (home_goals_pred_rf + home_goals_pred_nb) / 2
+            away_avg_goals = (away_goals_pred_rf + away_goals_pred_nb) / 2
+
+            # 将数组转换为标量
+            home_avg_goals_value = home_avg_goals.item() if isinstance(home_avg_goals, np.ndarray) else home_avg_goals
+            away_avg_goals_value = away_avg_goals.item() if isinstance(away_avg_goals, np.ndarray) else away_avg_goals
+
+            home_goals_prob = poisson_prediction(home_avg_goals_value, max_goals=5)
+            away_goals_prob = poisson_prediction(away_avg_goals_value, max_goals=5)
 
             score_probs = score_probability(home_goals_prob, away_goals_prob)
 
             # 计算胜平负概率
             home_win_prob, draw_prob, away_win_prob = calculate_match_outcome_probabilities(home_goals_prob, away_goals_prob)
 
+            # 计算理论赔率
+            home_odds, draw_odds, away_odds = calculate_odds(home_win_prob, draw_prob, away_win_prob)
+
+            # 输出结果
             st.header("⚽ 预测结果")
-            st.write(f"主队的平均进球数: {home_avg_goals:.2f}")
-            st.write(f"客队的平均进球数: {away_avg_goals:.2f}")
+            st.write(f"主队的平均进球数: {home_avg_goals_value:.2f} (理论赔率: {home_odds:.2f})")
+            st.write(f"客队的平均进球数: {away_avg_goals_value:.2f} (理论赔率: {away_odds:.2f})")
 
-            # 创建表格数据
-            table_data = []
-            for i, home_prob in enumerate(home_goals_prob):
-                for j, away_prob in enumerate(away_goals_prob):
-                    row = [i, j, i + j, score_probs[i, j]]
-                    table_data.append(row)
+            # 创建比分统计表
+            total_goals_prob = score_probs.sum(axis=1)  # 主队总进球数的概率
+            total_goals_prob_df = pd.DataFrame(score_probs, columns=[f'客队进球数 {i}' for i in range(len(away_goals_prob))],
+                                                index=[f'主队进球数 {i}' for i in range(len(home_goals_prob))])
+            total_goals_prob_df['总进球数概率'] = total_goals_prob
+            
+            # 设置样式以根据概率的大小改变背景色
+            def highlight_probabilities(df):
+                return df.style.apply(highlight_max, subset=pd.IndexSlice[:, df.columns[:-1]])
 
-            # 将表格数据转换为DataFrame
-            df = pd.DataFrame(table_data, columns=["主队进球数", "客队进球数", "总进球数", "概率"])
-            st.write("进球概率表格:")
-            st.write(df)
+            st.write("比分统计表 (概率越大，颜色越深):")
+            st.dataframe(highlight_probabilities(total_goals_prob_df))
 
             # 显示胜平负概率
-            st.write(f"主队胜的概率: {home_win_prob:.2%}")
-            st.write(f"平局的概率: {draw_prob:.2%}")
-            st.write(f"客队胜的概率: {away_win_prob:.2%}")
-
-        else:
-            st.error("请确认选择即将进行的比赛。")
+            st.write("胜平负概率:")
+            st.write(f"主队胜的概率: {home_win_prob:.2%} (理论赔率: {home_odds:.2f})")
+            st.write(f"平局的概率: {draw_prob:.2%} (理论赔率: {draw_odds:.2f})")
+            st.write(f"客队胜的概率: {away_win_prob:.2%} (理论赔率: {away_odds:.2f})")
     else:
         st.error("未能加载即将进行的比赛，请检查 API。")
 else:
