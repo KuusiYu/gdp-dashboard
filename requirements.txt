@@ -8,3 +8,4 @@ requests
 scikit-learn
 scipy
 Statsmodels
+tensorflow
