@@ -9,3 +9,7 @@ scikit-learn
 scipy
 Statsmodels
 tensorflow
+LightGBM
+Statsmodels
+XGBoost
+NetworkX
