@@ -359,10 +359,10 @@ if leagues:
                 st.header("📈 博彩建议")
                 
                 total_goals_avg = np.argmax(total_goals_prob)
-                if total_goals_avg >= 2.5:
-                    st.write("建议：投注总进球数大于2.5")
+                if total_goals_avg >= 3:
+                    st.write("建议：投注总进球数大于3")
                 else:
-                    st.write("建议：投注总进球数小于2.5")
+                    st.write("建议：投注总进球数小于3")
                 # 让球建议
                 if abs(home_win_prob - away_win_prob) < 0.1:  # 如果两队实力接近
                     st.write("建议：选择平局或小额投注")
