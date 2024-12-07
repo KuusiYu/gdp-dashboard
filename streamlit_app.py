@@ -73,7 +73,7 @@ class DataFetcher:
                 history = [
                     (match['homeTeam']['id'], match['score']['fullTime']['home'], match['score']['fullTime']['away']) if match['homeTeam']['id'] == team_id else 
                     (match['awayTeam']['id'], match['score']['fullTime']['away'], match['score']['fullTime']['home'])
-                    for match in matches
+                    for match in matches[:limit]  # 限制加载的比赛数量
                     if match['score']['fullTime']['home'] is not None and match['score']['fullTime']['away'] is not None
                 ]
                 os.makedirs(os.path.dirname(cache_file), exist_ok=True)
@@ -157,34 +157,34 @@ def train_models(home_history, away_history, home_degree, away_degree, home_betw
     X_home = scaler.fit_transform(X_home)
     X_away = scaler.transform(X_away)
 
-    rf_home = RandomForestRegressor(n_estimators=100)
+    rf_home = RandomForestRegressor(n_estimators=50)  # 减少树的数量
     rf_home.fit(X_home, y_home)
 
-    rf_away = RandomForestRegressor(n_estimators=100)
+    rf_away = RandomForestRegressor(n_estimators=50)  # 减少树的数量
     rf_away.fit(X_away, y_away)
 
-    xgb_home = xgb.XGBRegressor(n_estimators=100, objective='reg:squarederror')
+    xgb_home = xgb.XGBRegressor(n_estimators=50, objective='reg:squarederror')  # 减少树的数量
     xgb_home.fit(X_home, y_home)
 
-    xgb_away = xgb.XGBRegressor(n_estimators=100, objective='reg:squarederror')
+    xgb_away = xgb.XGBRegressor(n_estimators=50, objective='reg:squarederror')  # 减少树的数量
     xgb_away.fit(X_away, y_away)
 
-    lgb_home = lgb.LGBMRegressor(n_estimators=100)
+    lgb_home = lgb.LGBMRegressor(n_estimators=50)  # 减少树的数量
     lgb_home.fit(X_home, y_home)
 
-    lgb_away = lgb.LGBMRegressor(n_estimators=100)
+    lgb_away = lgb.LGBMRegressor(n_estimators=50)  # 减少树的数量
     lgb_away.fit(X_away, y_away)
 
     model_home = GLM(y_home, X_home, family=families.NegativeBinomial()).fit()
     model_away = GLM(y_away, X_away, family=families.NegativeBinomial()).fit()
 
-    gbr_home = GradientBoostingRegressor(n_estimators=100)
+    gbr_home = GradientBoostingRegressor(n_estimators=50)  # 减少树的数量
     gbr_home.fit(X_home, y_home)
 
-    gbr_away = GradientBoostingRegressor(n_estimators=100)
+    gbr_away = GradientBoostingRegressor(n_estimators=50)  # 减少树的数量
     gbr_away.fit(X_away, y_away)
 
-    return (rf_home, xgb_home, lgb_home, model_home, gbr_home), (rf_away, xgb_away, lgb_away, model_away, gbr_away)
+    return (rf_home, xgb_home, lgb_home, model_home), (rf_away, xgb_away, lgb_away, model_away)
 
 def build_team_graph(home_history, away_history):
     G = nx.Graph()
@@ -216,8 +216,8 @@ def build_and_train_model(X_train, y_train):
     y_train = np.array(y_train, ndmin=1)  # 确保 y_train 是一维数组
 
     model = Sequential([
-        Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
-        Dense(64, activation='relu'),
+        Dense(32, activation='relu', input_shape=(X_train.shape[1],)),
+        Dense(32, activation='relu'),
         Dense(1)
     ])
 
@@ -225,7 +225,7 @@ def build_and_train_model(X_train, y_train):
                   loss='mean_squared_error',
                   metrics=['mae'])
 
-    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0)
+    model.fit(X_train, y_train, epochs=10, batch_size=64, verbose=0)  # 减少训练轮次和批量大小
 
     return model
 
@@ -363,7 +363,8 @@ if leagues:
                     st.write("建议：投注总进球数大于3")
                 else:
                     st.write("建议：投注总进球数小于3")
-                # 让球建议
+                
+ # 让球建议
                 if abs(home_win_prob - away_win_prob) < 0.1:  # 如果两队实力接近
                     st.write("建议：选择平局或小额投注")
                 elif home_win_prob > away_win_prob:
