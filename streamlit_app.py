@@ -195,7 +195,7 @@ if leagues_data:
 
         confirm_button = st.sidebar.button("确认选择")
         point_handicap = st.sidebar.number_input('输入受让/让球盘口', min_value=-5.0, max_value=5.0, value=0.0)
-        total_goals_line = st.sidebar.number_input('输入大小球盘口', min_value=0.0, max_value=10.0, value=2.5)
+        total_goals_line = st.sidebar.number_input('输入大小球盘口', min_value=0.0, max_value=10.0, value=0.0)
 
         if confirm_button:
             with st.spinner("正在加载数据..."):
