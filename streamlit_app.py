@@ -5,17 +5,19 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
-import networkx as nx
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.preprocessing import StandardScaler
-from statsmodels.api import GLM, families
 from scipy.stats import poisson
 import xgboost as xgb
 import lightgbm as lgb
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
 import time
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from functools import lru_cache
+
+# 设置中文字体，确保可以显示中文
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
 
 # 固定 API 密钥
 API_KEY = '0c2379b28acb446bb97bd417f2666f81'  # 请替换为你的实际 API 密钥
@@ -44,22 +46,14 @@ class DataFetcher:
     def get_leagues(self):
         url = 'https://api.football-data.org/v4/competitions/'
         headers = {'X-Auth-Token': self.api_key}
-        data = self.get_data_with_retries(url, headers)
-        if data:
-            competitions = data.get('competitions', [])
-            return {competition['name']: competition['id'] for competition in competitions}
-        return {}
+        return self.get_data_with_retries(url, headers)
 
     def get_teams_in_league(self, league_id):
         url = f'https://api.football-data.org/v4/competitions/{league_id}/teams'
         headers = {'X-Auth-Token': self.api_key}
-        data = self.get_data_with_retries(url, headers)
-        if data:
-            teams = data.get('teams', [])
-            return {team['name']: team['id'] for team in teams}
-        return {}
+        return self.get_data_with_retries(url, headers)
 
-    def get_team_history(self, team_id, limit=5):
+    def get_team_history(self, team_id, limit=6):
         cache_file = f"cache/team_{team_id}_history.joblib"
         if os.path.exists(cache_file):
             logging.info(f"Loading team history from cache: {cache_file}")
@@ -73,7 +67,7 @@ class DataFetcher:
                 history = [
                     (match['homeTeam']['id'], match['score']['fullTime']['home'], match['score']['fullTime']['away']) if match['homeTeam']['id'] == team_id else 
                     (match['awayTeam']['id'], match['score']['fullTime']['away'], match['score']['fullTime']['home'])
-                    for match in matches[:limit]  # 限制加载的比赛数量
+                    for match in matches[:limit]  
                     if match['score']['fullTime']['home'] is not None and match['score']['fullTime']['away'] is not None
                 ]
                 os.makedirs(os.path.dirname(cache_file), exist_ok=True)
@@ -85,10 +79,28 @@ class DataFetcher:
                 st.error("无法获取历史比赛数据")
                 return []
 
-def poisson_prediction(avg_goals, max_goals=5):
+# 初始化 DataFetcher 实例
+fetcher = DataFetcher(API_KEY)
+
+@st.cache_data
+def cache_get_leagues(api_key):
+    fetcher = DataFetcher(api_key)
+    return fetcher.get_leagues()
+
+@st.cache_data
+def cache_get_teams_in_league(api_key, league_id):
+    fetcher = DataFetcher(api_key)
+    return fetcher.get_teams_in_league(league_id)
+
+@st.cache_data
+def cache_get_team_history(api_key, team_id, limit=6):
+    fetcher = DataFetcher(api_key)
+    return fetcher.get_team_history(team_id, limit)
+
+def poisson_prediction(avg_goals, max_goals=6):
     return [poisson.pmf(i, avg_goals) for i in range(max_goals + 1)]
 
-def calculate_weighted_average_goals(history, n=5):
+def calculate_weighted_average_goals(history, n=10):
     if len(history) == 0:
         return 0
     recent_performances = history[-n:]
@@ -98,9 +110,6 @@ def calculate_average_goals(home_history, away_history):
     avg_home_goals = calculate_weighted_average_goals(home_history)
     avg_away_goals = calculate_weighted_average_goals(away_history)
     return avg_home_goals, avg_away_goals
-
-def adjust_goals_for_injuries(avg_goals, injury_factor):
-    return avg_goals * injury_factor
 
 def calculate_total_goals_prob(home_goals_prob, away_goals_prob):
     max_goals = len(home_goals_prob) + len(away_goals_prob) - 2
@@ -133,192 +142,116 @@ def calculate_odds(home_win_prob, draw_prob, away_win_prob):
     
     return home_odds, draw_odds, away_odds
 
-def train_models(home_history, away_history, home_degree, away_degree, home_betweenness, away_betweenness, home_closeness, away_closeness):
+def train_models(home_history, away_history):
     home_goals = [goals for _, goals, _ in home_history]
     away_goals = [goals for _, _, goals in away_history]
     
-    X_home = np.column_stack((
-        np.arange(len(home_goals)),
-        [home_degree] * len(home_goals),
-        [home_betweenness] * len(home_goals),
-        [home_closeness] * len(home_goals)
-    ))
+    X_home = np.arange(len(home_goals)).reshape(-1, 1)
     y_home = np.array(home_goals)
 
-    X_away = np.column_stack((
-        np.arange(len(away_goals)),
-        [away_degree] * len(away_goals),
-        [away_betweenness] * len(away_goals),
-        [away_closeness] * len(away_goals)
-    ))
+    X_away = np.arange(len(away_goals)).reshape(-1, 1)
     y_away = np.array(away_goals)
 
     scaler = StandardScaler()
     X_home = scaler.fit_transform(X_home)
     X_away = scaler.transform(X_away)
 
-    rf_home = RandomForestRegressor(n_estimators=50)  # 减少树的数量
+    rf_home = RandomForestRegressor(n_estimators=100)
     rf_home.fit(X_home, y_home)
 
-    rf_away = RandomForestRegressor(n_estimators=50)  # 减少树的数量
+    rf_away = RandomForestRegressor(n_estimators=100)
     rf_away.fit(X_away, y_away)
 
-    xgb_home = xgb.XGBRegressor(n_estimators=50, objective='reg:squarederror')  # 减少树的数量
+    xgb_home = xgb.XGBRegressor(n_estimators=100, objective='reg:squarederror')
     xgb_home.fit(X_home, y_home)
 
-    xgb_away = xgb.XGBRegressor(n_estimators=50, objective='reg:squarederror')  # 减少树的数量
+    xgb_away = xgb.XGBRegressor(n_estimators=100, objective='reg:squarederror')
     xgb_away.fit(X_away, y_away)
 
-    lgb_home = lgb.LGBMRegressor(n_estimators=50)  # 减少树的数量
+    lgb_home = lgb.LGBMRegressor(n_estimators=100, min_data_in_leaf=5)  
     lgb_home.fit(X_home, y_home)
 
-    lgb_away = lgb.LGBMRegressor(n_estimators=50)  # 减少树的数量
+    lgb_away = lgb.LGBMRegressor(n_estimators=100, min_data_in_leaf=5)  
     lgb_away.fit(X_away, y_away)
 
-    model_home = GLM(y_home, X_home, family=families.NegativeBinomial()).fit()
-    model_away = GLM(y_away, X_away, family=families.NegativeBinomial()).fit()
-
-    gbr_home = GradientBoostingRegressor(n_estimators=50)  # 减少树的数量
-    gbr_home.fit(X_home, y_home)
-
-    gbr_away = GradientBoostingRegressor(n_estimators=50)  # 减少树的数量
-    gbr_away.fit(X_away, y_away)
-
-    return (rf_home, xgb_home, lgb_home, model_home), (rf_away, xgb_away, lgb_away, model_away)
-
-def build_team_graph(home_history, away_history):
-    G = nx.Graph()
-    home_teams = set([match[0] for match in home_history])
-    away_teams = set([match[0] for match in away_history])
-    all_teams = home_teams.union(away_teams)
-    
-    for team in all_teams:
-        G.add_node(team)
-    
-    for match in home_history:
-        if match[0] in G and match[2] > 0:  
-            G.add_edge(match[0], match[1], weight=match[2])
-    
-    for match in away_history:
-        if match[1] in G and match[2] > 0:  
-            G.add_edge(match[1], match[0], weight=match[2])
-    
-    return G
-
-def analyze_graph(G):
-    degrees = dict(nx.degree(G))
-    betweenness = nx.betweenness_centrality(G)
-    closeness = nx.closeness_centrality(G)
-    return degrees, betweenness, closeness
-
-def build_and_train_model(X_train, y_train):
-    X_train = np.array(X_train, ndmin=2)  # 确保 X_train 是二维数组
-    y_train = np.array(y_train, ndmin=1)  # 确保 y_train 是一维数组
-
-    model = Sequential([
-        Dense(32, activation='relu', input_shape=(X_train.shape[1],)),
-        Dense(32, activation='relu'),
-        Dense(1)
-    ])
-
-    model.compile(optimizer='adam',
-                  loss='mean_squared_error',
-                  metrics=['mae'])
-
-    model.fit(X_train, y_train, epochs=10, batch_size=64, verbose=0)  # 减少训练轮次和批量大小
-
-    return model
-
-def prepare_data(home_history, away_history, home_degree, away_degree, home_betweenness, away_betweenness, home_closeness, away_closeness):
-    avg_home_goals, avg_away_goals = calculate_average_goals(home_history, away_history)
-    
-    injury_factor_home = 1.0
-    injury_factor_away = 1.0
-
-    avg_home_goals = adjust_goals_for_injuries(avg_home_goals, injury_factor_home)
-    avg_away_goals = adjust_goals_for_injuries(avg_away_goals, injury_factor_away)
-
-    # 输入特征应是二维数组
-    feature_vector = np.array([
-        [1, home_degree, home_betweenness, home_closeness]
-    ])
-
-    return feature_vector
+    return (rf_home, xgb_home, lgb_home), (rf_away, xgb_away, lgb_away)
 
 st.title('⚽ 足球比赛进球数预测')
 
 st.sidebar.title("输入参数设置")
 
-fetcher = DataFetcher(API_KEY)
-
-leagues = fetcher.get_leagues()
-if leagues:
+# 获取联赛数据
+leagues_data = cache_get_leagues(API_KEY)
+if leagues_data:
+    leagues = {league['name']: league['id'] for league in leagues_data['competitions']}
     selected_league_name = st.sidebar.selectbox('选择联赛', list(leagues.keys()))
     league_id = leagues[selected_league_name]
 
-    teams = fetcher.get_teams_in_league(league_id)
-    if teams:
+    teams_data = cache_get_teams_in_league(API_KEY, league_id)
+    if teams_data:
+        teams = {team['name']: team['id'] for team in teams_data['teams']}
         selected_home_team_name = st.sidebar.selectbox('选择主队', list(teams.keys()))
         selected_away_team_name = st.sidebar.selectbox('选择客队', list(teams.keys()))
 
         confirm_button = st.sidebar.button("确认选择")
+        point_handicap = st.sidebar.number_input('输入受让/让球盘口', min_value=-5.0, max_value=5.0, value=0.0)
+        total_goals_line = st.sidebar.number_input('输入大小球盘口', min_value=0.0, max_value=10.0, value=2.5)
 
         if confirm_button:
             with st.spinner("正在加载数据..."):
                 home_team_id = teams[selected_home_team_name]
                 away_team_id = teams[selected_away_team_name]
 
-                home_history = fetcher.get_team_history(home_team_id, limit=5)
-                away_history = fetcher.get_team_history(away_team_id, limit=5)
+                home_history = cache_get_team_history(API_KEY, home_team_id, limit=6)
+                away_history = cache_get_team_history(API_KEY, away_team_id, limit=6)
+                avg_home_goals, avg_away_goals = calculate_average_goals(home_history, away_history)
 
-                G = build_team_graph(home_history, away_history)
-                degrees, betweenness, closeness = analyze_graph(G)
+                home_models, away_models = train_models(home_history, away_history)
 
-                home_degree = degrees.get(home_team_id, 0)
-                away_degree = degrees.get(away_team_id, 0)
-                home_betweenness = betweenness.get(home_team_id, 0)
-                away_betweenness = betweenness.get(away_team_id, 0)
-                home_closeness = closeness.get(home_team_id, 0)
-                away_closeness = closeness.get(away_team_id, 0)
-
-                features = prepare_data(home_history, away_history, 
-                                        home_degree, away_degree, 
-                                        home_betweenness, away_betweenness, 
-                                        home_closeness, away_closeness)
-
-                home_models, away_models = train_models(home_history, away_history, 
-                                                        home_degree, away_degree, 
-                                                        home_betweenness, away_betweenness, 
-                                                        home_closeness, away_closeness)
-
-                predictions = []
+                predictions_home = []
+                predictions_away = []
                 for model in home_models:
-                    predictions.append(model.predict(features)[0])
-                
-                nn_model = build_and_train_model(features, [np.mean([match[1] for match in home_history])])
-                predictions.append(nn_model.predict(features)[0][0])
+                    predictions_home.append(model.predict([[0]])[0])
+                for model in away_models:
+                    predictions_away.append(model.predict([[0]])[0])
 
-                combined_prediction = np.mean(predictions)
+                predicted_home_goals = np.mean(predictions_home)
+                predicted_away_goals = np.mean(predictions_away)
 
                 st.header("⚽ 预测结果")
-                st.markdown(f"<h3 style='color: green;'>预测主队进球数: {combined_prediction:.2f}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='color: green;'>预测主队进球数: {predicted_home_goals:.2f}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='color: green;'>预测客队进球数: {predicted_away_goals:.2f}</h3>", unsafe_allow_html=True)
 
-                home_goals_prob = poisson_prediction(np.mean([match[1] for match in home_history]))
-                away_goals_prob = poisson_prediction(np.mean([match[2] for match in away_history]))
-
+                home_goals_prob = poisson_prediction(predicted_home_goals)
+                away_goals_prob = poisson_prediction(predicted_away_goals)
                 total_goals_prob = calculate_total_goals_prob(home_goals_prob, away_goals_prob)
 
                 home_win_prob, draw_prob, away_win_prob = calculate_match_outcome_probabilities(home_goals_prob, away_goals_prob)
 
                 home_odds, draw_odds, away_odds = calculate_odds(home_win_prob, draw_prob, away_win_prob)
 
-                st.header("⚽ 中心性指标")
-                st.write(f"**主队度数中心性:** {home_degree:.2f}")
-                st.write(f"**客队度数中心性:** {away_degree:.2f}")
-                st.write(f"**主队介数中心性:** {home_betweenness:.2f}")
-                st.write(f"**客队介数中心性:** {away_betweenness:.2f}")
-                st.write(f"**主队接近中心性:** {home_closeness:.2f}")
-                st.write(f"**客队接近中心性:** {away_closeness:.2f}")
+                st.header("⚽ 比赛结果概率")
+                st.write(f"主队胜的概率: {home_win_prob:.2%}")
+                st.write(f"平局的概率: {draw_prob:.2%}")
+                st.write(f"客队胜的概率: {away_win_prob:.2%}")
+
+                st.header("📈 博彩建议")
+                total_goals_line_int = int(total_goals_line)
+                if np.sum(total_goals_prob[total_goals_line_int:]) > 0.5:
+                    st.write("建议：投注总进球数大于或等于盘口")
+                else:
+                    st.write("建议：投注总进球数小于盘口")
+
+                if predicted_home_goals > predicted_away_goals:
+                    st.write(f"建议：投注主队让{point_handicap}球胜")
+                elif predicted_home_goals < predicted_away_goals:
+                    st.write(f"建议：投注客队受{point_handicap}球胜")
+                else:
+                    st.write("建议：投注平局")
+
+                st.write(f"主队胜的赔率: {home_odds:.2f}")
+                st.write(f"平局的赔率: {draw_odds:.2f}")
+                st.write(f"客队胜的赔率: {away_odds:.2f}")
 
                 columns = [f'客队进球数 {i}' for i in range(len(away_goals_prob))]
                 index = [f'主队进球数 {i}' for i in range(len(home_goals_prob))]
@@ -328,12 +261,29 @@ if leagues:
                 # 将概率乘以100并保留两位小数
                 score_probs_df *= 100
                 score_probs_df = score_probs_df.round(2)
-                score_probs_df = score_probs_df.applymap(lambda x: f"{x:.2f}%").applymap(lambda x: x.rstrip('0').rstrip('%') if '.' in x else x)
 
-                st.write("#### 进球数概率统计表 (%):")
-                styled_df = score_probs_df.style.background_gradient(cmap='Blues', low=0, high=1)
-                st.dataframe(styled_df)
+                # 将比分表格转换为热力图
+                st.header("📈 比分概率热力图")
+                fig, ax = plt.subplots(figsize=(10, 8))
+                cmap = cm.viridis  # 使用渐变色
+                im = ax.imshow(score_probs_df, cmap=cmap, interpolation='nearest')
+                fig.colorbar(im, ax=ax)
 
+                # 设置 x 和 y 轴标签
+                ax.set_xticks(np.arange(len(columns)))
+                ax.set_yticks(np.arange(len(index)))
+                ax.set_xticklabels(columns,fontsize=10)
+                ax.set_yticklabels(index,fontsize=10)
+
+                # 在热力图上显示数值
+                for i in range(score_probs_df.shape[0]):
+                    for j in range(score_probs_df.shape[1]):
+                        ax.text(j, i, f"{score_probs_df.iloc[i, j]:.2f}", ha="center", va="center", color="r",fontsize=20)
+
+                # 显示图形
+                st.pyplot(fig)
+
+                # 显示各队进球数概率
                 st.header("⚽ 各队进球数概率")
                 col1, col2 = st.columns(2)
                 with col1:
@@ -346,33 +296,15 @@ if leagues:
                     for i, prob in enumerate(away_goals_prob):
                         st.write(f"进球数 {i}: 概率 {prob * 100:.2f}%")
 
+                # 显示总进球数概率
                 st.header("⚽ 总进球数概率")
                 for total_goals, prob in enumerate(total_goals_prob):
                     if prob > 0:
                         st.write(f"总进球数: {total_goals}, 概率: {prob * 100:.2f}%")
 
-                st.write("#### 胜平负概率:")
-                st.write(f"主队胜的概率: {home_win_prob:.2%}")
-                st.write(f"平局的概率: {draw_prob:.2%}")
-                st.write(f"客队胜的概率: {away_win_prob:.2%}")
-
-                st.header("📈 博彩建议")
-                
-                total_goals_avg = np.argmax(total_goals_prob)
-                if total_goals_avg >= 3:
-                    st.write("建议：投注总进球数大于3")
-                else:
-                    st.write("建议：投注总进球数小于3")
-                
- # 让球建议
-                if abs(home_win_prob - away_win_prob) < 0.1:  # 如果两队实力接近
-                    st.write("建议：选择平局或小额投注")
-                elif home_win_prob > away_win_prob:
-                    st.write(f"建议：主队让球，推荐投注主队胜，赔率为 {home_odds:.2f}")
-                else:
-                    st.write(f"建议：客队让球，推荐投注客队胜，赔率为 {away_odds:.2f}")
-
+        else:
+            st.error("未能加载该联赛的球队，请检查 API。")
     else:
-        st.error("未能加载该联赛的球队，请检查 API。")
+        st.error("没有可用的联赛数据。")
 else:
-    st.error("没有可用的联赛数据。")
+    st.error("无法连接到足球数据 API。")
