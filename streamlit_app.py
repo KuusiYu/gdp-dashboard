@@ -253,8 +253,8 @@ if leagues_data:
                 st.write(f"平局的赔率: {draw_odds:.2f}")
                 st.write(f"客队胜的赔率: {away_odds:.2f}")
 
-                columns = [f'客队进球数 {i}' for i in range(len(away_goals_prob))]
-                index = [f'主队进球数 {i}' for i in range(len(home_goals_prob))]
+                columns = [f'away {i}' for i in range(len(away_goals_prob))]
+                index = [f'home {i}' for i in range(len(home_goals_prob))]
                 score_probs_df = pd.DataFrame(score_probability(home_goals_prob, away_goals_prob), 
                                                columns=columns, index=index)
 
