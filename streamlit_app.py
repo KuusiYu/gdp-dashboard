@@ -283,7 +283,7 @@ if leagues_data:
                 labels=dict(x="客队进球数", y="主队进球数", color="概率 (%)"),
                 x=x_labels,
                 y=y_labels,
-                color_continuous_scale='cividis'
+                color_continuous_scale='Blues'
                 )
                 fig.update_layout(
                 title="比分概率热力图",
