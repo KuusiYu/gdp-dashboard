@@ -13,3 +13,4 @@ LightGBM
 Statsmodels
 XGBoost
 NetworkX
+plotly
