@@ -306,7 +306,7 @@ if leagues_data:
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': range(len(away_goals_prob)),  # 进球数应为正数
+                    'Goals': range(1,len(away_goals_prob)),  # 进球数应为正数
                     'Probability': away_goals_prob,
                 })
 
@@ -323,7 +323,7 @@ if leagues_data:
                     y=home_goal_probs_df['Probability'],
                     name=f'{selected_home_team_name} (主队)',
                     marker_color='blue',  # 固定颜色
-                    orientation='v'  # 竖直方向
+                    orientation='h'  # 竖直方向
                 ))
 
                 # 添加客队条形图（右侧）
@@ -332,7 +332,7 @@ if leagues_data:
                     y=away_goal_probs_df['Probability'],
                     name=f'{selected_away_team_name} (客队)',
                     marker_color='cyan',  # 固定颜色
-                    orientation='v'  # 竖直方向
+                    orientation='h'  # 竖直方向
                 ))
 
                 # 更新布局
