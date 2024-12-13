@@ -299,14 +299,14 @@ if leagues_data:
                 # 各队进球数概率
                 st.header("⚽ 各队进球数概率")
 
-                # 创建主队和客队的DataFrame
+                # 创建数据框
                 home_goal_probs_df = pd.DataFrame({
                     'Goals': range(len(home_goals_prob)),
                     'Probability': home_goals_prob,
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': [-x for x in range(1, len(away_goals_prob)+1)],
+                    'Goals': range(1, len(away_goals_prob)+1),  # 进球数应为正数
                     'Probability': away_goals_prob,
                 })
 
@@ -321,9 +321,9 @@ if leagues_data:
                     marker_color='blue'
                 ))
 
-                # 添加客队条形图
+                # 添加客队条形图，这里我们将x轴的值取反以放置在左侧
                 fig.add_trace(go.Bar(
-                    x=[-x for x in away_goal_probs_df['Goals']],  # 取负值以将条形图放置在左侧
+                    x=-away_goal_probs_df['Goals'],  # 取负值以将条形图放置在左侧
                     y=away_goal_probs_df['Probability'],
                     name='客队',
                     marker_color='cyan'
@@ -339,8 +339,8 @@ if leagues_data:
                     legend=dict(orientation="h"),  # 图例水平显示
                     xaxis=dict(
                         tickmode='array',
-                        tickvals=[-x for x in range(1, len(away_goals_prob)+1)] + list(range(1, len(home_goals_prob)+1)),
-                        ticktext=[f"{selected_away_team_name}"] * len(away_goals_prob) + [f"{selected_home_team_name}"] * len(home_goals_prob)
+                        tickvals=list(range(-len(away_goals_prob), 0)) + list(range(1, len(home_goals_prob)+1)),  # 包含负数和正数
+                        ticktext=[str(x) for x in range(1, len(away_goals_prob)+1)] * 2  # 因为我们有两个队伍，所以重复标签
                     )
                 )
 
