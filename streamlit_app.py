@@ -306,7 +306,7 @@ if leagues_data:
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': [-x for x in range(1, len(away_goals_prob)+1)]
+                    'Goals': [-x for x in range(1, len(away_goals_prob)+1)],
                     'Probability': away_goals_prob,
                 })
 
@@ -339,7 +339,7 @@ if leagues_data:
                     legend=dict(orientation="h"),  # 图例水平显示
                     xaxis=dict(
                         tickmode='array',
-                        tickvals=[-x for x in range(1, len(away_goals_prob)+1))] + list(range(1, len(home_goals_prob)+1)),
+                        tickvals=[-x for x in range(1, len(away_goals_prob)+1)] + list(range(1, len(home_goals_prob)+1)),
                         ticktext=[f"{selected_away_team_name}"] * len(away_goals_prob) + [f"{selected_home_team_name}"] * len(home_goals_prob)
                     )
                 )
