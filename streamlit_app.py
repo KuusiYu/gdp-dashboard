@@ -331,7 +331,7 @@ if leagues_data:
                         colorscale='Blues',  # 使用 Blues 颜色渐变
                         cmin=global_cmin,
                         cmax=global_cmax,
-                        showscale=True  # 显示颜色刻度尺
+                        showscale=False  # 显示颜色刻度尺
                     ),
                     orientation='v'  # 竖直方向
                 ))
@@ -346,7 +346,7 @@ if leagues_data:
                         colorscale='Cyan',  # 使用 Cyan 颜色渐变
                         cmin=global_cmin,
                         cmax=global_cmax,
-                        showscale=True  # 显示颜色刻度尺
+                        showscale=False  # 显示颜色刻度尺
                     ),
                     orientation='v'  # 竖直方向
                 ))
