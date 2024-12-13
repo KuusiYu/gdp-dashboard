@@ -225,7 +225,7 @@ if leagues_data:
 
                 st.header("⚽ 预测结果")
                 st.markdown(f"<h3 style='color: green;'>预测主队进球数: {predicted_home_goals:.2f}</h3>", unsafe_allow_html=True)
-                st.markdown(f"<h3 style='color: blue;'>预测客队进球数: {predicted_away_goals:.2f}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='color: purple;'>预测客队进球数: {predicted_away_goals:.2f}</h3>", unsafe_allow_html=True)
 
                 home_goals_prob = poisson_prediction(predicted_home_goals)
                 away_goals_prob = poisson_prediction(predicted_away_goals)
