@@ -301,13 +301,23 @@ if leagues_data:
                 col1, col2 = st.columns(2)
                 with col1:
                     st.subheader(f"{selected_home_team_name} 进球数概率:")
-                    for i, prob in enumerate(home_goals_prob):
-                        st.write(f"进球数 {i}: 概率 {prob * 100:.2f}%")
+                    home_goal_probs_df = pd.DataFrame({
+                        'Goals': range(len(home_goals_prob)),
+                        'Probability': home_goals_prob
+                    })
+                    fig = px.violin(home_goal_probs_df, y="Goals", box=True, points="all",
+                                    title=f"{selected_home_team_name} 进球数概率分布")
+                    st.plotly_chart(fig)
 
                 with col2:
                     st.subheader(f"{selected_away_team_name} 进球数概率:")
-                    for i, prob in enumerate(away_goals_prob):
-                        st.write(f"进球数 {i}: 概率 {prob * 100:.2f}%")
+                    away_goal_probs_df = pd.DataFrame({
+                        'Goals': range(len(away_goals_prob)),
+                        'Probability': away_goals_prob
+                    })
+                    fig = px.violin(away_goal_probs_df, y="Goals", box=True, points="all",
+                                    title=f"{selected_away_team_name} 进球数概率分布")
+                    st.plotly_chart(fig)
 
                 # 总进球数概率
                 st.header("⚽ 总进球数概率")
