@@ -186,7 +186,7 @@ def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, p
 
     # 提取并返回生成的报告
     return response['choices'][0]['message']['content'].strip()
-st.title('⚽ 足球比赛进球数预测')
+st.title('⚽ 足球比赛预测')
 
 # 设置侧边栏参数
 st.sidebar.title("输入参数设置")
