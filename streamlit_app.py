@@ -301,15 +301,15 @@ if leagues_data:
 
                 # 创建主队和客队的DataFrame
                 home_goal_probs_df = pd.DataFrame({
-                    'Goals': range(len(home_goals_prob)),
-                    'Probability': home_goals_prob
-                    'Team': ['主队'] * len(home_goals_prob)
+                    'Team': selected_home_team_name,
+                    'Goals': list(range(len(home_goals_prob))) * 2,  # 复制列表以匹配客队数据长度
+                    'Probability': home_goals_prob * 2  # 复制概率列表以匹配长度
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': [-x for x in range(1, len(away_goals_prob)+1)],  # 用负数实现反向条形图
+                    'Team': selected_away_team_name,
+                    'Goals': list(range(-len(away_goals_prob), 0)),  # 使用负数实现反向条形图
                     'Probability': away_goals_prob
-                    'Team': ['客队'] * len(away_goals_prob)
                 })
 
                 # 合并DataFrame
@@ -320,8 +320,8 @@ if leagues_data:
 
                 # 添加条形图
                 fig.add_trace(go.Bar(
-                    x=home_goal_probs_df['Goals'],
-                    y=home_goal_probs_df['Probability'],
+                    x=combined_goal_probs_df['Goals'],
+                    y=combined_goal_probs_df['Team'],
                     marker_color=combined_goal_probs_df['Team'].map({'主队': 'blue', '客队': 'cyan'})
                 ))
 
@@ -335,8 +335,8 @@ if leagues_data:
                     legend=dict(orientation="h"),  # 图例水平显示
                     xaxis=dict(
                         tickmode='array',
-                        tickvals=list(range(len(home_goals_prob))) + list(range(len(away_goals_prob))),
-                        ticktext=[f"{selected_home_team_name}"] * len(home_goals_prob) + [f"{selected_away_team_name}"] * len(away_goals_prob)
+                        tickvals=list(range(-len(away_goals_prob), 0)) + list(range(len(home_goals_prob))),
+                        ticktext=[f"{selected_away_team_name}"] * len(away_goals_prob) + [f"{selected_home_team_name}"] * len(home_goals_prob)
                     )
                 )
 
