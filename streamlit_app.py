@@ -306,7 +306,7 @@ if leagues_data:
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': range(1, len(away_goals_prob)+1),  # 进球数应为正数
+                    'Goals': range(len(away_goals_prob)),  # 进球数应为正数
                     'Probability': away_goals_prob,
                 })
 
