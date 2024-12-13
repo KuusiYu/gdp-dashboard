@@ -306,7 +306,7 @@ if leagues_data:
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': [-x for x in range(len(away_goals_prob))],  # 用负数实现反向条形图
+                    'Goals': range(len(away_goals_prob)),
                     'Probability': away_goals_prob,
                 })
 
@@ -334,7 +334,7 @@ if leagues_data:
                     title=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布",
                     xaxis_title="进球数",
                     yaxis_title="概率",
-                    barmode='overlay',  # 将条形图分组
+                    barmode='group',  # 将条形图分组
                     legend_title="队伍",
                     legend=dict(orientation="h"),  # 图例水平显示
                     xaxis=dict(
