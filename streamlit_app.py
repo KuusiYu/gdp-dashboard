@@ -303,13 +303,11 @@ if leagues_data:
                 home_goal_probs_df = pd.DataFrame({
                     'Goals': range(len(home_goals_prob)),
                     'Probability': home_goals_prob,
-                    'Team': ['主队'] * len(home_goals_prob)
                 })
 
                 away_goal_probs_df = pd.DataFrame({
                     'Goals': [-x for x in range(len(away_goals_prob))],  # 用负数实现反向条形图
                     'Probability': away_goals_prob,
-                    'Team': ['客队'] * len(away_goals_prob)
                 })
 
                 # 创建对称条形图
@@ -325,7 +323,7 @@ if leagues_data:
 
                 # 添加客队条形图
                 fig.add_trace(go.Bar(
-                    x=away_goal_probs_df['Goals'],
+                    x=[-x for x in away_goal_probs_df['Goals']],  # 取负值以将条形图放置在左侧
                     y=away_goal_probs_df['Probability'],
                     name='客队',
                     marker_color='cyan'
@@ -336,7 +334,7 @@ if leagues_data:
                     title=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布",
                     xaxis_title="进球数",
                     yaxis_title="概率",
-                    barmode='group',  # 将条形图分组
+                    barmode='overlay',  # 将条形图分组
                     legend_title="队伍",
                     legend=dict(orientation="h"),  # 图例水平显示
                     xaxis=dict(
