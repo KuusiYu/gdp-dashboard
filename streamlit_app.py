@@ -306,31 +306,46 @@ if leagues_data:
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': range(len(away_goals_prob)),
+                    'Goals': [-x for x in range(1, len(away_goals_prob)+1)],  # 用负数实现反向条形图
                     'Probability': away_goals_prob
                 })
 
-                # 各队进球数概率
-                st.header("⚽ 各队进球数概率")
-
-                # 创建主队和客队的DataFrame
-                home_goal_probs_df = pd.DataFrame({
-                    'Goals': range(len(home_goals_prob)),
-                    'Probability': home_goals_prob,
-                    'Team': ['Home'] * len(home_goals_prob)
-                })
-
-                away_goal_probs_df = pd.DataFrame({
-                    'Goals': [-x for x in range(len(away_goals_prob))],  # 用负数实现反向条形图
-                    'Probability': away_goals_prob,
-                    'Team': ['Away'] * len(away_goals_prob)
-                })
-
-                # 合并DataFrame
-                combined_goal_probs_df = pd.concat([home_goal_probs_df, away_goal_probs_df])
-
                 # 创建对称条形图
                 fig = go.Figure()
+
+                # 添加主队条形图
+                fig.add_trace(go.Bar(
+                    x=home_goal_probs_df['Goals'],
+                    y=home_goal_probs_df['Probability'],
+                    name='主队',
+                    marker_color='blue'
+                ))
+
+                # 添加客队条形图，注意Goals的取值，以实现对称
+                fig.add_trace(go.Bar(
+                    x=away_goal_probs_df['Goals'],
+                    y=away_goal_probs_df['Probability'],
+                    name='客队',
+                    marker_color='cyan'
+                ))
+
+                # 更新布局，设置标题和轴标签
+                fig.update_layout(
+                    title_text=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布",
+                    xaxis_title="进球数",
+                    yaxis_title="概率",
+                    barmode='group',  # 将条形图分组
+                    legend_title="状态",
+                    legend=dict(orientation="h"),  # 图例水平显示
+                    xaxis=dict(
+                        tickmode='array',
+                        tickvals=[-x for x in range(1, len(away_goals_prob)+1)] + list(range(1, len(home_goals_prob)+1)),
+                        ticktext=[f"{-x}" for x in range(1, len(away_goals_prob)+1)] + list(range(1, len(home_goals_prob)+1))
+                    )
+                )
+
+                # 在Streamlit中显示图形
+                st.plotly_chart(fig)
 
                 # 添加条形图
                 fig.add_trace(go.Bar(
