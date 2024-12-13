@@ -313,10 +313,6 @@ if leagues_data:
                 # 确保概率值在有效范围内
                 home_goal_probs_df['Probability'] = home_goal_probs_df['Probability'].clip(lower=0, upper=1)
                 away_goal_probs_df['Probability'] = away_goal_probs_df['Probability'].clip(lower=0, upper=1)
-
-                # 计算全局的颜色映射范围
-                global_cmin = min(min(home_goal_probs_df['Probability']), min(away_goal_probs_df['Probability']))
-                global_cmax = max(max(home_goal_probs_df['Probability']), max(away_goal_probs_df['Probability']))
                 
                 # 创建对称条形图
                 fig = go.Figure()
@@ -326,13 +322,7 @@ if leagues_data:
                     x=-home_goal_probs_df['Goals'],  # 取负值以将条形图放置在左侧
                     y=home_goal_probs_df['Probability'],
                     name=f'{selected_home_team_name} (主队)',
-                    marker=dict(
-                        color=home_goal_probs_df['Probability'],
-                        colorscale='Blues',  # 使用 Blues 颜色渐变
-                        cmin=global_cmin,
-                        cmax=global_cmax,
-                        showscale=False  # 显示颜色刻度尺
-                    ),
+                    marker_color='blue',  # 固定颜色
                     orientation='v'  # 竖直方向
                 ))
 
@@ -341,13 +331,7 @@ if leagues_data:
                     x=away_goal_probs_df['Goals'],  # 正值以将条形图放置在右侧
                     y=away_goal_probs_df['Probability'],
                     name=f'{selected_away_team_name} (客队)',
-                    marker=dict(
-                        color=away_goal_probs_df['Probability'],
-                        colorscale='Cyan',  # 使用 Cyan 颜色渐变
-                        cmin=global_cmin,
-                        cmax=global_cmax,
-                        showscale=False  # 显示颜色刻度尺
-                    ),
+                    marker_color='cyan',  # 固定颜色
                     orientation='v'  # 竖直方向
                 ))
 
