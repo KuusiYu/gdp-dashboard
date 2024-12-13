@@ -310,6 +310,14 @@ if leagues_data:
                     'Probability': away_goals_prob,
                 })
 
+                # 确保概率值在有效范围内
+                home_goal_probs_df['Probability'] = home_goal_probs_df['Probability'].clip(lower=0, upper=1)
+                away_goal_probs_df['Probability'] = away_goal_probs_df['Probability'].clip(lower=0, upper=1)
+
+                # 计算全局的颜色映射范围
+                global_cmin = min(min(home_goal_probs_df['Probability']), min(away_goal_probs_df['Probability']))
+                global_cmax = max(max(home_goal_probs_df['Probability']), max(away_goal_probs_df['Probability']))
+                
                 # 创建对称条形图
                 fig = go.Figure()
 
@@ -321,8 +329,8 @@ if leagues_data:
                     marker=dict(
                         color=home_goal_probs_df['Probability'],
                         colorscale='Blues',  # 使用 Blues 颜色渐变
-                        cmin=min(home_goal_probs_df['Probability']),  # 设置颜色刻度的最小值
-                        cmax=max(home_goal_probs_df['Probability']),  # 设置颜色刻度的最大值
+                        cmin=global_cmin,
+                        cmax=global_cmax,
                         showscale=True  # 显示颜色刻度尺
                     ),
                     orientation='v'  # 竖直方向
@@ -336,8 +344,8 @@ if leagues_data:
                     marker=dict(
                         color=away_goal_probs_df['Probability'],
                         colorscale='Cyan',  # 使用 Cyan 颜色渐变
-                        cmin=min(away_goal_probs_df['Probability']),  # 设置颜色刻度的最小值
-                        cmax=max(away_goal_probs_df['Probability']),  # 设置颜色刻度的最大值
+                        cmin=global_cmin,
+                        cmax=global_cmax,
                         showscale=True  # 显示颜色刻度尺
                     ),
                     orientation='v'  # 竖直方向
