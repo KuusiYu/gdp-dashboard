@@ -347,8 +347,8 @@ if leagues_data:
                     yaxis_title="概率",
                     legend_title="队伍",
                     xaxis=dict(
-                        tickvals=[-x for x in range(len(away_goals_prob))] + range(len(home_goals_prob)),
-                        ticktext=[str(x) for x in range(len(away_goals_prob), 0, -1))] + list(range(1, len(home_goals_prob)+1))
+                       tickvals=[-x for x in range(len(away_goals_prob))] + range(len(home_goals_prob)),
+                       ticktext=[str(x) for x in range(len(away_goals_prob), 0, -1))] + list(range(1, len(home_goals_prob)+1))
                     ),
                     shapes=[  # 添加中心线
                         dict(
