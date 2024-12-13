@@ -321,6 +321,8 @@ if leagues_data:
                     marker=dict(
                         color=home_goal_probs_df['Probability'],
                         colorscale='Blues',  # 使用 Blues 颜色渐变
+                        cmin=min(home_goal_probs_df['Probability']),  # 设置颜色刻度的最小值
+                        cmax=max(home_goal_probs_df['Probability']),  # 设置颜色刻度的最大值
                         showscale=True  # 显示颜色刻度尺
                     ),
                     orientation='v'  # 竖直方向
@@ -334,6 +336,8 @@ if leagues_data:
                     marker=dict(
                         color=away_goal_probs_df['Probability'],
                         colorscale='Cyan',  # 使用 Cyan 颜色渐变
+                        cmin=min(away_goal_probs_df['Probability']),  # 设置颜色刻度的最小值
+                        cmax=max(away_goal_probs_df['Probability']),  # 设置颜色刻度的最大值
                         showscale=True  # 显示颜色刻度尺
                     ),
                     orientation='v'  # 竖直方向
