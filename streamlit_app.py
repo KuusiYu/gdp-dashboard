@@ -303,54 +303,40 @@ if leagues_data:
                 home_goal_probs_df = pd.DataFrame({
                     'Goals': range(len(home_goals_prob)),
                     'Probability': home_goals_prob
+                    'Team': ['主队'] * len(home_goals_prob)
                 })
 
                 away_goal_probs_df = pd.DataFrame({
                     'Goals': [-x for x in range(1, len(away_goals_prob)+1)],  # 用负数实现反向条形图
                     'Probability': away_goals_prob
+                    'Team': ['客队'] * len(away_goals_prob)
                 })
 
+                # 合并DataFrame
+                combined_goal_probs_df = pd.concat([home_goal_probs_df, away_goal_probs_df])
+                
                 # 创建对称条形图
                 fig = go.Figure()
 
-                # 添加主队条形图
+                # 添加条形图
                 fig.add_trace(go.Bar(
                     x=home_goal_probs_df['Goals'],
                     y=home_goal_probs_df['Probability'],
-                    name='主队',
-                    marker_color='blue'
+                    marker_color=combined_goal_probs_df['Team'].map({'主队': 'blue', '客队': 'cyan'})
                 ))
 
-                # 添加客队条形图，注意Goals的取值，以实现对称
-                fig.add_trace(go.Bar(
-                    x=away_goal_probs_df['Goals'],
-                    y=away_goal_probs_df['Probability'],
-                    name='客队',
-                    marker_color='cyan'
-                ))
-
-                # 添加中心线
-                fig.add_shape(
-                    type="line",
-                    x0=0,  # 中心线从x=0开始
-                    y0=min(min(home_goals_prob), min(away_goals_prob)),  # 从概率的最小值开始
-                    x1=0,
-                    y1=max(max(home_goals_prob), max(away_goals_prob)),  # 到概率的最大值结束
-                    line=dict(color="Black", width=2, dash="dash")
-                )              
-                
-                # 更新布局，设置标题和轴标签
+                # 更新布局
                 fig.update_layout(
+                    barmode='group',  # 将条形图分组
                     title_text=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布",
                     xaxis_title="进球数",
                     yaxis_title="概率",
-                    barmode='group',  # 将条形图分组
-                    legend_title="状态",
+                    legend_title="队伍",
                     legend=dict(orientation="h"),  # 图例水平显示
                     xaxis=dict(
                         tickmode='array',
-                        tickvals=[-x for x in range(1, len(away_goals_prob)+1)] + list(range(1, len(home_goals_prob)+1)),
-                        ticktext=[f"{-x}" for x in range(1, len(away_goals_prob)+1)] + list(range(1, len(home_goals_prob)+1))
+                        tickvals=list(range(len(home_goals_prob))) + list(range(len(away_goals_prob))),
+                        ticktext=[f"{selected_home_team_name}"] * len(home_goals_prob) + [f"{selected_away_team_name}"] * len(away_goals_prob)
                     )
                 )
 
