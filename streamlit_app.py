@@ -354,17 +354,21 @@ if leagues_data:
                     marker_color=combined_goal_probs_df['Team'].map({'Home': 'blue', 'Away': 'cyan'})
                 ))
 
-                # 更新布局
+                # 更新布局，设置标题和轴标签
                 fig.update_layout(
-                    barmode='overlay',  # 叠加条形图
-                    title="主客队进球数概率分布",
+                    title_text=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布",
                     xaxis_title="进球数",
                     yaxis_title="概率",
-                    legend_title="队伍",
+                    barmode='group',  # 将条形图分组
+                    legend_title="状态",
+                    legend=dict(orientation="h"),  # 图例水平显示
                     xaxis=dict(
-                        tickvals=[-x for x in range(len(away_goals_prob))] + range(len(home_goals_prob)),
-                        ticktext=[str(x) for x in range(len(away_goals_prob), 0, -1))] + list(range(1, len(home_goals_prob)+1))
-                    ),
+                        tickmode='array',
+                        tickvals=[-x for x in range(1, len(away_goals_prob)+1)] + list(range(1, len(home_goals_prob)+1)),
+                        ticktext=[f"{-x}" for x in range(1, len(away_goals_prob)+1)] + [str(x) for x in range(1, len(home_goals_prob)+1)]
+                    )
+                )
+
                     shapes=[  # 添加中心线
                         dict(
                            type="line",
