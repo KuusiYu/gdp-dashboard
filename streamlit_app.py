@@ -209,7 +209,7 @@ if leagues_data:
         total_goals_line = st.sidebar.number_input('输入大小球盘口', min_value=0.0, max_value=10.0, value=2.5)
 
         if confirm_button:
-            with st.spinner("正在加载数据..."):
+            with st.spinner("请耐心等待30秒，程序正在运行。"):
                 home_team_id = teams[selected_home_team_name]
                 away_team_id = teams[selected_away_team_name]
 
