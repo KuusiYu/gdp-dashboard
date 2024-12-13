@@ -1,10 +1,9 @@
 import os
-import logging
-import joblib
 import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
+import joblib
 from scipy.stats import poisson
 import xgboost as xgb
 import lightgbm as lgb
@@ -12,8 +11,6 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 import time
 import matplotlib.pyplot as plt
-from matplotlib import cm
-from functools import lru_cache
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -25,6 +22,7 @@ plt.rcParams['axes.unicode_minus'] = False
 API_KEY = '0c2379b28acb446bb97bd417f2666f81'  # 请替换为你的实际 API 密钥
 
 # 设置日志记录
+import logging
 logging.basicConfig(level=logging.INFO)
 
 class DataFetcher:
@@ -34,6 +32,7 @@ class DataFetcher:
     def get_data_with_retries(self, url, headers, retries=5, delay=2):
         for attempt in range(retries):
             response = requests.get(url, headers=headers)
+            logging.info(f"尝试第 {attempt + 1} 次请求，状态码: {response.status_code}, 响应内容: {response.text}")
             if response.status_code == 200:
                 return response.json()
             elif response.status_code == 429:
@@ -67,14 +66,20 @@ class DataFetcher:
             if data:
                 matches = data.get('matches', [])
                 history = [
-                    (match['homeTeam']['id'], match['score']['fullTime']['home'], match['score']['fullTime']['away']) if match['homeTeam']['id'] == team_id else 
+                    (match['homeTeam']['id'], match['score']['fullTime']['home'], match['score']['fullTime']['away'])
+                    if match['homeTeam']['id'] == team_id else
                     (match['awayTeam']['id'], match['score']['fullTime']['away'], match['score']['fullTime']['home'])
-                    for match in matches[:limit]  
+                    for match in matches[:limit]
                     if match['score']['fullTime']['home'] is not None and match['score']['fullTime']['away'] is not None
                 ]
+                if len(history) < limit:
+                    logging.warning(f"获取的历史比赛数据不足，仅获取到 {len(history)} 场比赛。")
                 os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-                joblib.dump(history, cache_file)
-                logging.info(f"Saved team history to cache: {cache_file}")
+                try:
+                    joblib.dump(history, cache_file)
+                    logging.info(f"Saved team history to cache: {cache_file}")
+                except Exception as e:
+                    logging.error(f"写入缓存文件失败: {e}")
                 return history[:limit]
             else:
                 logging.error("无法获取历史比赛数据")
@@ -95,14 +100,14 @@ def cache_get_teams_in_league(api_key, league_id):
     return fetcher.get_teams_in_league(league_id)
 
 @st.cache_data(ttl=3600)
-def cache_get_team_history(api_key, team_id, limit=6):
+def cache_get_team_history(api_key, team_id, limit=100):
     fetcher = DataFetcher(api_key)
     return fetcher.get_team_history(team_id, limit)
 
-def poisson_prediction(avg_goals, max_goals=6):
+def poisson_prediction(avg_goals, max_goals=5):
     return [poisson.pmf(i, avg_goals) for i in range(max_goals + 1)]
 
-def calculate_weighted_average_goals(history, n=10):
+def calculate_weighted_average_goals(history, n=100):
     if len(history) == 0:
         return 0
     recent_performances = history[-n:]
@@ -116,7 +121,7 @@ def calculate_average_goals(home_history, away_history):
 def calculate_total_goals_prob(home_goals_prob, away_goals_prob):
     max_goals = len(home_goals_prob) + len(away_goals_prob) - 2
     total_goals_prob = np.zeros(max_goals + 1)
-    
+
     for i in range(len(home_goals_prob)):
         for j in range(len(away_goals_prob)):
             total_goals = i + j
@@ -132,16 +137,15 @@ def score_probability(home_goals_prob, away_goals_prob):
     return score_probs
 
 def calculate_match_outcome_probabilities(home_goals_prob, away_goals_prob):
-    home_win_prob = sum(home_goals_prob[i] * sum(away_goals_prob[j] for j in range(i)) for i in range(len(home_goals_prob)))  
-    draw_prob = sum(home_goals_prob[i] * away_goals_prob[i] for i in range(len(home_goals_prob)))  
-    away_win_prob = sum(away_goals_prob[j] * sum(home_goals_prob[i] for i in range(j)) for j in range(len(away_goals_prob)))  
+    home_win_prob = sum(home_goals_prob[i] * sum(away_goals_prob[j] for j in range(i)) for i in range(1, len(home_goals_prob)))
+    draw_prob = sum(home_goals_prob[i] * away_goals_prob[i] for i in range(len(home_goals_prob)))
+    away_win_prob = sum(away_goals_prob[j] * sum(home_goals_prob[i] for i in range(j)) for j in range(1, len(away_goals_prob)))
     return home_win_prob, draw_prob, away_win_prob
 
 def calculate_odds(home_win_prob, draw_prob, away_win_prob):
     home_odds = 1 / home_win_prob if home_win_prob > 0 else float('inf')
     draw_odds = 1 / draw_prob if draw_prob > 0 else float('inf')
     away_odds = 1 / away_win_prob if away_win_prob > 0 else float('inf')
-    
     return home_odds, draw_odds, away_odds
 
 def train_models(history):
@@ -180,6 +184,8 @@ def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, p
     """
     return analysis
 
+    # 提取并返回生成的报告
+    return response['choices'][0]['message']['content'].strip()
 st.title('⚽ 足球比赛进球数预测')
 
 # 设置侧边栏参数
@@ -219,7 +225,7 @@ if leagues_data:
 
                 st.header("⚽ 预测结果")
                 st.markdown(f"<h3 style='color: green;'>预测主队进球数: {predicted_home_goals:.2f}</h3>", unsafe_allow_html=True)
-                st.markdown(f"<h3 style='color: green;'>预测客队进球数: {predicted_away_goals:.2f}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='color: blue;'>预测客队进球数: {predicted_away_goals:.2f}</h3>", unsafe_allow_html=True)
 
                 home_goals_prob = poisson_prediction(predicted_home_goals)
                 away_goals_prob = poisson_prediction(predicted_away_goals)
@@ -267,8 +273,6 @@ if leagues_data:
 
                 # 比分概率热力图
                 st.header("📈 比分概率热力图")
-                home_goals_prob = poisson_prediction(predicted_home_goals)
-                away_goals_prob = poisson_prediction(predicted_away_goals)
                 score_probs = score_probability(home_goals_prob, away_goals_prob)
 
                 # 将 range 对象转换为列表
@@ -279,16 +283,16 @@ if leagues_data:
                 score_probs_df = pd.DataFrame(score_probs, index=y_labels, columns=x_labels)
 
                 fig = px.imshow(
-                score_probs_df,
-                labels=dict(x="客队进球数", y="主队进球数", color="概率 (%)"),
-                x=x_labels,
-                y=y_labels,
-                color_continuous_scale='Blues'
+                    score_probs_df,
+                    labels=dict(x="客队进球数", y="主队进球数", color="概率 (%)"),
+                    x=x_labels,
+                    y=y_labels,
+                    color_continuous_scale='RdYlGn'
                 )
                 fig.update_layout(
-                title="比分概率热力图",
-                xaxis_title="客队进球数",
-                yaxis_title="主队进球数"
+                    title="比分概率热力图",
+                    xaxis_title="客队进球数",
+                    yaxis_title="主队进球数"
                 )
                 st.plotly_chart(fig)
 
@@ -313,7 +317,7 @@ if leagues_data:
                 })
                 total_goals_prob_df = total_goals_prob_df[total_goals_prob_df["概率 (%)"] > 0]
                 st.write(total_goals_prob_df)
-
+                
                 # 总进球数概率柱状图
                 st.header("📊 总进球数概率柱状图")
                 fig = px.bar(
@@ -321,6 +325,7 @@ if leagues_data:
                     x="总进球数",
                     y="概率 (%)",
                     title="总进球数概率分布",
+                    color="概率 (%)",  # 根据概率值调整颜色
                     labels={"总进球数": "总进球数", "概率 (%)": "概率 (%)"},
                     text_auto=True
                 )
