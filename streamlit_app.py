@@ -313,20 +313,30 @@ if leagues_data:
                 # 创建对称条形图
                 fig = go.Figure()
 
-                # 添加主队条形图
+                # 添加主队条形图（左侧）
                 fig.add_trace(go.Bar(
-                    x=home_goal_probs_df['Goals'],
+                    x=-home_goal_probs_df['Goals'],  # 取负值以将条形图放置在左侧
                     y=home_goal_probs_df['Probability'],
-                    name='主队',
-                    marker_color='blue'
+                    name=f'{selected_home_team_name} (主队)',
+                    marker=dict(
+                        color=home_goal_probs_df['Probability'],
+                        colorscale='Blues',  # 使用 Blues 颜色渐变
+                        showscale=True  # 显示颜色刻度尺
+                    ),
+                    orientation='v'  # 竖直方向
                 ))
 
-                # 添加客队条形图，这里我们将x轴的值取反以放置在左侧
+                # 添加客队条形图（右侧）
                 fig.add_trace(go.Bar(
-                    x=-away_goal_probs_df['Goals'],  # 取负值以将条形图放置在左侧
+                    x=away_goal_probs_df['Goals'],  # 正值以将条形图放置在右侧
                     y=away_goal_probs_df['Probability'],
-                    name='客队',
-                    marker_color='cyan'
+                    name=f'{selected_away_team_name} (客队)',
+                    marker=dict(
+                        color=away_goal_probs_df['Probability'],
+                        colorscale='Cyan',  # 使用 Cyan 颜色渐变
+                        showscale=True  # 显示颜色刻度尺
+                    ),
+                    orientation='v'  # 竖直方向
                 ))
 
                 # 更新布局
@@ -334,15 +344,20 @@ if leagues_data:
                     title=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布",
                     xaxis_title="进球数",
                     yaxis_title="概率",
-                    barmode='group',  # 将条形图分组
+                    barmode='overlay',  # 条形图重叠
                     legend_title="队伍",
                     legend=dict(orientation="h"),  # 图例水平显示
                     xaxis=dict(
                         tickmode='array',
-                        tickvals=list(range(-len(away_goals_prob), 0)) + list(range(1, len(home_goals_prob)+1)),  # 包含负数和正数
-                        ticktext=[str(x) for x in range(1, len(away_goals_prob)+1)] * 2  # 因为我们有两个队伍，所以重复标签
+                        tickvals=list(-home_goal_probs_df['Goals']) + list(away_goal_probs_df['Goals']),  # 包含负数和正数
+                        ticktext=[f"{selected_home_team_name} {g}" for g in home_goal_probs_df['Goals']] + 
+                                 [f"{selected_away_team_name} {g}" for g in away_goal_probs_df['Goals']]
                     )
                 )
+
+                # 设置 x 轴范围以确保图形居中
+                max_goals = max(home_goal_probs_df['Goals'].max(), away_goal_probs_df['Goals'].max())
+                fig.update_xaxes(range=[-max_goals-1, max_goals+1])
 
                 # 在Streamlit中显示图形
                 st.plotly_chart(fig)
