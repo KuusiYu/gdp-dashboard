@@ -298,42 +298,55 @@ if leagues_data:
 
                 # 各队进球数概率
                 st.header("⚽ 各队进球数概率")
-                col1, col2 = st.columns(2)
 
                 # 创建主队和客队的DataFrame
                 home_goal_probs_df = pd.DataFrame({
                     'Goals': range(len(home_goals_prob)),
-                    'Probability': home_goals_prob,
-                    'Team': [selected_home_team_name] * len(home_goals_prob)
+                    'Probability': home_goals_prob
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': range(len(away_goals_prob))[::-1],  # 反转数组以使条形图反向显示
-                    'Probability': away_goals_prob,
-                    'Team': [selected_away_team_name] * len(away_goals_prob)
+                    'Goals': range(len(away_goals_prob)),
+                    'Probability': away_goals_prob
                 })
 
-                # 合并两个DataFrame
-                combined_df = pd.concat([home_goal_probs_df, away_goal_probs_df], ignore_index=True)
-
                 # 创建对称条形图
-                fig = px.bar(combined_df, x="Goals", y="Probability", color="Team", barmode='relative',
-                             title=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布")
+                fig = go.Figure()
+
+                # 主队条形图
+                fig.add_trace(go.Bar(
+                    x=home_goal_probs_df['Goals'],
+                    y=home_goal_probs_df['Probability'],
+                    name=selected_home_team_name,
+                    orientation='v',
+                    marker_color='rgba(50, 171, 96, 0.8)'
+                ))
+
+                # 客队条形图
+                fig.add_trace(go.Bar(
+                    x=away_goal_probs_df['Goals'] + len(home_goals_prob),  # 偏移量，使得条形图在右侧
+                    y=away_goal_probs_df['Probability'],
+                    name=selected_away_team_name,
+                    orientation='v',
+                    marker_color='rgba(211, 54, 130, 0.8)'
+                ))
 
                 # 添加中间分隔线
                 fig.add_shape(type="line",
-                             x0=0.5, x1=0.5, y0=0, y1=max(home_goals_prob + away_goals_prob),
+                             x0=len(home_goal_probs_df) - 0.5, x1=len(home_goal_probs_df) - 0.5,
+                             y0=0, y1=max(max(home_goals_prob), max(away_goals_prob)),
                              line=dict(color="Black", width=2, dash='dash'))
 
-                # 设置x轴和y轴标题
+                # 设置布局
                 fig.update_layout(
+                    title=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布",
                     xaxis_title="进球数",
                     yaxis_title="概率",
                     legend_title="队伍"
                 )
-
+  
                 # 在Streamlit中显示图形
-                col1.plotly_chart(fig)
+                st.plotly_chart(fig)
 
                 # 总进球数概率
                 st.header("⚽ 总进球数概率")
