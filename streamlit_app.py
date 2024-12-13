@@ -306,7 +306,7 @@ if leagues_data:
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': range(len(away_goals_prob)),
+                    'Goals': [-x for x in range(1, len(away_goals_prob)+1)]
                     'Probability': away_goals_prob,
                 })
 
