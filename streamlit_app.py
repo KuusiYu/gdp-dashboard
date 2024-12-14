@@ -229,7 +229,7 @@ if leagues_data:
 
                 home_goals_prob = poisson_prediction(predicted_home_goals)
                 away_goals_prob = poisson_prediction(predicted_away_goals)
-                
+
                 # 计算总进球数概率
                 total_goals_prob = calculate_total_goals_prob(home_goals_prob, away_goals_prob)
 
@@ -287,7 +287,7 @@ if leagues_data:
                     labels=dict(x="客队进球数", y="主队进球数", color="概率 (%)"),
                     x=x_labels,
                     y=y_labels,
-                    color_continuous_scale='RdYlGn'
+                    color_continuous_scale='Blues'
                 )
                 fig.update_layout(
                     title="比分概率热力图",
@@ -306,54 +306,52 @@ if leagues_data:
                 })
 
                 away_goal_probs_df = pd.DataFrame({
-                    'Goals': range(1,len(away_goals_prob)),  # 进球数应为正数
+                    'Goals': range(len(away_goals_prob)),
                     'Probability': away_goals_prob,
                 })
 
                 # 确保概率值在有效范围内
                 home_goal_probs_df['Probability'] = home_goal_probs_df['Probability'].clip(lower=0, upper=1)
                 away_goal_probs_df['Probability'] = away_goal_probs_df['Probability'].clip(lower=0, upper=1)
-                
+                max_goals = max(home_goal_probs_df['Goals'].max(), away_goal_probs_df['Goals'].max()) + 1
+                max_prob = max(home_goal_probs_df['Probability'].max(), away_goal_probs_df['Probability'].max())
+
                 # 创建对称条形图
                 fig = go.Figure()
 
                 # 添加主队条形图（左侧）
                 fig.add_trace(go.Bar(
-                    x=-home_goal_probs_df['Goals'],  # 取负值以将条形图放置在左侧
-                    y=home_goal_probs_df['Probability'],
-                    name=f'{selected_home_team_name} (主队)',
-                    marker_color='blue',  # 固定颜色
-                    orientation='h'  # 竖直方向
+                    y=home_goal_probs_df['Goals'],
+                    x=-home_goal_probs_df['Probability'],
+                    name= f'{selected_home_team_name} (主队)',
+                    marker_color='pink',
+                    orientation='h',
+                    text=home_goal_probs_df['Probability'],
+                    texttemplate='%{text:.4f}',  # 显示概率，保留两位小数
+                    textposition='outside'
                 ))
 
                 # 添加客队条形图（右侧）
                 fig.add_trace(go.Bar(
-                    x=away_goal_probs_df['Goals'],  # 正值以将条形图放置在右侧
-                    y=away_goal_probs_df['Probability'],
-                    name=f'{selected_away_team_name} (客队)',
-                    marker_color='cyan',  # 固定颜色
-                    orientation='h'  # 竖直方向
+                    y=away_goal_probs_df['Goals'],
+                    x=away_goal_probs_df['Probability'],
+                    name= f'{selected_away_team_name} (客队)',
+                    marker_color='lightgreen',
+                    orientation='h',
+                    text=away_goal_probs_df['Probability'],  # 显示概率，去掉负号
+                    texttemplate='%{text:.3f}',  # 显示概率，保留两位小数
+                    textposition='outside',
+                    yaxis='y2'
                 ))
 
                 # 更新布局
                 fig.update_layout(
-                    title=f"{selected_home_team_name} vs {selected_away_team_name} 进球数概率分布",
-                    xaxis_title="进球数",
-                    yaxis_title="概率",
-                    barmode='overlay',  # 条形图重叠
-                    legend_title="队伍",
-                    legend=dict(orientation="h"),  # 图例水平显示
-                    xaxis=dict(
-                        tickmode='array',
-                        tickvals=list(-home_goal_probs_df['Goals']) + list(away_goal_probs_df['Goals']),  # 包含负数和正数
-                        ticktext=[f"{selected_home_team_name} {g}" for g in home_goal_probs_df['Goals']] + 
-                                 [f"{selected_away_team_name} {g}" for g in away_goal_probs_df['Goals']]
-                    )
+                    title='两队进球数概率对比',
+                    barmode='group',
+                    yaxis=dict(title='进球数', tick0=0, dtick=1),
+                    yaxis2=dict(title='进球数', tick0=0, dtick=1, overlaying='y', side='right'),
+                    xaxis=dict(title='概率')
                 )
-
-                # 设置 x 轴范围以确保图形居中
-                max_goals = max(home_goal_probs_df['Goals'].max(), away_goal_probs_df['Goals'].max())
-                fig.update_xaxes(range=[-max_goals-1, max_goals+1])
 
                 # 在Streamlit中显示图形
                 st.plotly_chart(fig)
@@ -365,7 +363,6 @@ if leagues_data:
                     "概率 (%)": total_goals_prob * 100
                 })
                 total_goals_prob_df = total_goals_prob_df[total_goals_prob_df["概率 (%)"] > 0]
-                st.write(total_goals_prob_df)
                 
                 # 总进球数概率柱状图
                 st.header("📊 总进球数概率柱状图")
