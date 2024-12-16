@@ -205,11 +205,11 @@ if leagues_data:
         selected_away_team_name = st.sidebar.selectbox('选择客队', list(teams.keys()))
 
         confirm_button = st.sidebar.button("确认选择")
-        point_handicap = st.sidebar.number_input('输入受让/让球盘口', min_value=-5.0, max_value=5.0, value=0.0)
+        point_handicap = st.sidebar.number_input('输入受让/让球盘口，主让球为负，客让球为正', min_value=-5.0, max_value=5.0, value=0.0)
         total_goals_line = st.sidebar.number_input('输入大小球盘口', min_value=0.0, max_value=10.0, value=2.5)
 
         if confirm_button:
-            with st.spinner("请耐心等待30秒，程序正在运行……"):
+            with st.spinner("请耐心等待30秒，程序正在运行。"):
                 home_team_id = teams[selected_home_team_name]
                 away_team_id = teams[selected_away_team_name]
 
@@ -223,12 +223,37 @@ if leagues_data:
                 predicted_home_goals = predict_goals(home_models, [[0]])
                 predicted_away_goals = predict_goals(away_models, [[0]])
 
-                st.header("⚽ 预测结果")
                 st.markdown(f"<h3 style='color: green;'>预测主队进球数: {predicted_home_goals:.2f}</h3>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='color: purple;'>预测客队进球数: {predicted_away_goals:.2f}</h3>", unsafe_allow_html=True)
 
                 home_goals_prob = poisson_prediction(predicted_home_goals)
                 away_goals_prob = poisson_prediction(predicted_away_goals)
+                home_goals_prob = np.array(home_goals_prob)
+                away_goals_prob = np.array(away_goals_prob)
+                home_goals_prob /= home_goals_prob.sum()
+                away_goals_prob /= away_goals_prob.sum()
+
+                # 蒙特卡罗模拟
+                def monte_carlo_simulation(home_goals_prob, away_goals_prob, simulations=75330):
+                    home_wins = 0
+                    draws = 0
+                    away_wins = 0
+
+                    for _ in range(simulations):
+                        home_goals = np.random.choice(range(len(home_goals_prob)), p=home_goals_prob)
+                        away_goals = np.random.choice(range(len(away_goals_prob)), p=away_goals_prob)
+
+                        if home_goals > away_goals:
+                            home_wins += 1
+                        elif home_goals == away_goals:
+                            draws += 1
+                        else:
+                            away_wins += 1
+
+                    return home_wins / simulations, draws / simulations, away_wins / simulations
+
+                # 执行蒙特卡罗模拟
+                home_win_prob, draw_prob, away_win_prob = monte_carlo_simulation(home_goals_prob, away_goals_prob)
 
                 # 计算总进球数概率
                 total_goals_prob = calculate_total_goals_prob(home_goals_prob, away_goals_prob)
@@ -238,41 +263,38 @@ if leagues_data:
 
                 # 根据概率提供博彩建议
                 total_goals_line_int = int(total_goals_line)
-                total_goals_line_ceil = np.ceil(total_goals_line)  # 向上取整以适应0.25, 0.5的盘口阶段
+                total_goals_line_ceil = np.ceil(total_goals_line* 4) / 4  # 向上取整以适应0.25, 0.5的盘口阶段
 
                 home_odds, draw_odds, away_odds = calculate_odds(home_win_prob, draw_prob, away_win_prob)
 
-                st.header("⚽ 比赛结果概率")
                 st.write(f"主队胜的概率: {home_win_prob:.2%}")
                 st.write(f"平局的概率: {draw_prob:.2%}")
                 st.write(f"客队胜的概率: {away_win_prob:.2%}")
 
-                st.header("📈 博彩建议")
                 total_goals_line_int = int(total_goals_line)
                 # 检查总进球数概率与盘口的关系
                 if np.sum(total_goals_prob[total_goals_line_int:]) > 0.5:
-                    st.write(f"建议：投注总进球数大于或等于{total_goals_line}的盘口")
+                    st.write(f"建议：投注总进球数大于{total_goals_line}的盘口")
                 elif np.sum(total_goals_prob[:total_goals_line_int]) > 0.5:
                     st.write(f"建议：投注总进球数小于{total_goals_line}的盘口")
                 else:
                     st.write("建议：根据当前概率，没有明确的投注方向")
 
                 # 比较主客队预测进球数，提供让球建议
-                if predicted_home_goals > predicted_away_goals:
+                if predicted_home_goals + point_handicap > predicted_away_goals:
                     if home_win_prob > 0.5:  # 如果主队胜率超过50%，则建议投注主队
                         st.write(f"建议：投注主队让{point_handicap}球胜")
                     else:
                         st.write("建议：考虑其他投注选项，主队胜率不高")
-                elif predicted_home_goals < predicted_away_goals:
+                elif predicted_home_goals - point_handicap < predicted_away_goals:
                     if away_win_prob > 0.5:  # 如果客队胜率超过50%，则建议投注客队
                         st.write(f"建议：投注客队受{point_handicap}球胜")
                     else:
                         st.write("建议：考虑其他投注选项，客队胜率不高")
                 else:
-                    st.write("建议：投注平局")
+                    st.write("建议：投注受球方")
 
                 # 比分概率热力图
-                st.header("📈 比分概率热力图")
                 score_probs = score_probability(home_goals_prob, away_goals_prob)
 
                 # 将 range 对象转换为列表
@@ -289,15 +311,17 @@ if leagues_data:
                     y=y_labels,
                     color_continuous_scale='Blues'
                 )
+                
+                # 设置x轴和y轴的刻度
+                fig.update_xaxes(tickmode='array', tickvals=np.arange(len(x_labels)), ticktext=x_labels)
+                fig.update_yaxes(tickmode='array', tickvals=np.arange(len(y_labels)), ticktext=y_labels)
+
                 fig.update_layout(
                     title="比分概率热力图",
                     xaxis_title="客队进球数",
                     yaxis_title="主队进球数"
                 )
                 st.plotly_chart(fig)
-
-                # 各队进球数概率
-                st.header("⚽ 各队进球数概率")
 
                 # 创建数据框
                 home_goal_probs_df = pd.DataFrame({
@@ -356,16 +380,12 @@ if leagues_data:
                 # 在Streamlit中显示图形
                 st.plotly_chart(fig)
 
-                # 总进球数概率
-                st.header("⚽ 总进球数概率")
                 total_goals_prob_df = pd.DataFrame({
                     "总进球数": np.arange(len(total_goals_prob)),
                     "概率 (%)": total_goals_prob * 100
                 })
                 total_goals_prob_df = total_goals_prob_df[total_goals_prob_df["概率 (%)"] > 0]
                 
-                # 总进球数概率柱状图
-                st.header("📊 总进球数概率柱状图")
                 fig = px.bar(
                     total_goals_prob_df,
                     x="总进球数",
@@ -375,6 +395,10 @@ if leagues_data:
                     labels={"总进球数": "总进球数", "概率 (%)": "概率 (%)"},
                     text_auto=True
                 )
+               
+                # 设置x轴的刻度间隔为1
+                fig.update_xaxes(dtick=1)
+ 
                 st.plotly_chart(fig)
 
                 # AI 分析报告
