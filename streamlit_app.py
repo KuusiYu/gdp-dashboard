@@ -157,6 +157,13 @@ def calculate_total_goals_prob(home_goals_prob, away_goals_prob):
 
     return total_goals_prob
 
+# 计算总进球数的期望值和标准差
+def calculate_expected_goals_and_std(total_goals_prob):
+    expected_goals = sum(i * total_goals_prob[i] for i in range(len(total_goals_prob)))
+    variance = sum((i - expected_goals) ** 2 * total_goals_prob[i] for i in range(len(total_goals_prob)))
+    std_dev = np.sqrt(variance)
+    return expected_goals, std_dev
+
 def score_probability(home_goals_prob, away_goals_prob):
     score_probs = np.zeros((len(home_goals_prob), len(away_goals_prob)))
     for i, home_prob in enumerate(home_goals_prob):
@@ -176,6 +183,35 @@ def calculate_odds(home_win_prob, draw_prob, away_win_prob):
     away_odds = 1 / away_win_prob if away_win_prob > 0 else float('inf')
     return home_odds, draw_odds, away_odds
 
+# 计算受让球建议（让球）
+def calculate_handicap_suggestion(home_goals_prob, away_goals_prob, point_handicap):
+    home_wins = 0
+    away_wins = 0
+    simulations = 73300  # 增加模拟次数，提高结果的精确度
+
+    for _ in range(simulations):
+        home_goals = np.random.choice(range(len(home_goals_prob)), p=home_goals_prob)
+        away_goals = np.random.choice(range(len(away_goals_prob)), p=away_goals_prob)
+
+        # 判断盘口的正负，调整比分
+        if point_handicap < 0:  # 主队让球
+            home_goals_adjusted = home_goals + point_handicap
+            if home_goals_adjusted > away_goals:
+                home_wins += 1
+            elif home_goals_adjusted < away_goals:
+                away_wins += 1
+        else:  # 客队让球
+            away_goals_adjusted = away_goals - point_handicap
+            if home_goals > away_goals_adjusted:
+                home_wins += 1
+            elif home_goals < away_goals_adjusted:
+                away_wins += 1
+
+    home_win_prob = home_wins / simulations
+    away_win_prob = away_wins / simulations
+
+    return home_win_prob, away_win_prob
+
 def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, predicted_away_goals, home_win_prob, draw_prob, away_win_prob):
     analysis = f"""
     **AI 分析报告**
@@ -190,7 +226,7 @@ def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, p
     """
     return analysis
 
-st.title('⚽足球比赛预测器')
+st.title('⚽ 足球比赛预测')
 
 # 设置侧边栏参数
 st.sidebar.title("输入参数设置")
@@ -267,6 +303,7 @@ if leagues_data:
 
                 # 计算总进球数概率
                 total_goals_prob = calculate_total_goals_prob(home_goals_prob, away_goals_prob)
+                expected_goals, std_dev = calculate_expected_goals_and_std(total_goals_prob)
 
                 # 计算主队胜、平局和客队胜的概率
                 home_win_prob, draw_prob, away_win_prob = calculate_match_outcome_probabilities(home_goals_prob, away_goals_prob)
@@ -282,27 +319,31 @@ if leagues_data:
                 st.write(f"客队胜的概率: {away_win_prob:.2%}")
 
                 total_goals_line_int = int(total_goals_line)
-                # 检查总进球数概率与盘口的关系
-                if np.sum(total_goals_prob[total_goals_line_int:]) > 0.5:
+                # 依据期望进球数和标准差判断建议
+                if expected_goals > total_goals_line + 0.5:
                     st.write(f"建议：投注总进球数大于{total_goals_line}的盘口")
-                elif np.sum(total_goals_prob[:total_goals_line_int]) > 0.5:
+                elif expected_goals < total_goals_line - 0.5:
                     st.write(f"建议：投注总进球数小于{total_goals_line}的盘口")
                 else:
                     st.write("建议：根据当前概率，没有明确的投注方向")
 
-                # 比较主客队预测进球数，提供让球建议
-                if home_expected_goals + point_handicap > away_expected_goals:
-                    if home_win_prob > 0.5:  # 如果主队胜率超过50%，则建议投注主队
-                        st.write(f"建议：投注主队让{point_handicap}球胜")
+                # 根据盘口计算建议
+                home_win_prob, away_win_prob = calculate_handicap_suggestion(home_goals_prob, away_goals_prob, point_handicap)
+
+                if point_handicap < 0:  # 主队让球
+                    if home_win_prob > 0.5:
+                        st.write(f"建议：投注主队让{abs(point_handicap)}球胜")
+                    elif away_win_prob > 0.5:
+                        st.write(f"建议：投注客队受{abs(point_handicap)}球胜")
                     else:
-                        st.write("建议：考虑其他投注选项，主队胜率不高")
-                elif home_expected_goals - point_handicap < away_expected_goals:
-                    if away_win_prob > 0.5:  # 如果客队胜率超过50%，则建议投注客队
-                        st.write(f"建议：投注客队受{point_handicap}球胜")
+                        st.write("建议：考虑其他投注选项，胜负难以判断")
+                else:  # 客队让球
+                    if away_win_prob > 0.5:
+                        st.write(f"建议：投注客队让{point_handicap}球胜")
+                    elif home_win_prob > 0.5:
+                        st.write(f"建议：投注主队受{point_handicap}球胜")
                     else:
-                        st.write("建议：考虑其他投注选项，客队胜率不高")
-                else:
-                    st.write("建议：投注受球方")
+                        st.write("建议：考虑其他投注选项，胜负难以判断")
 
                 # 比分概率热力图
                 score_probs = score_probability(home_goals_prob, away_goals_prob)
