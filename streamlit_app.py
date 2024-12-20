@@ -29,9 +29,18 @@ class DataFetcher:
     def __init__(self, api_key):
         self.api_key = api_key
 
-    def get_data_with_retries(self, url, headers, retries=5, delay=2):
+    def get_data_with_retries(self, url, headers, params=None, retries=5, delay=2):
+        """
+        带有重试机制的 API 请求方法
+        :param url: API 请求的 URL
+        :param headers: 请求头
+        :param params: 请求参数（可选）
+        :param retries: 重试次数
+        :param delay: 每次重试之间的延迟时间（秒）
+        :return: API 响应的 JSON 数据
+        """
         for attempt in range(retries):
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, params=params)  # 添加 params 参数
             logging.info(f"尝试第 {attempt + 1} 次请求，状态码: {response.status_code}, 响应内容: {response.text}")
             if response.status_code == 200:
                 return response.json()
@@ -54,37 +63,22 @@ class DataFetcher:
         headers = {'X-Auth-Token': self.api_key}
         return self.get_data_with_retries(url, headers)
 
-    def get_team_history(self, team_id, limit=6):
-        cache_file = f"cache/team_{team_id}_history.joblib"
-        if os.path.exists(cache_file):
-            logging.info(f"Loading team history from cache: {cache_file}")
-            return joblib.load(cache_file)[:limit]
-        else:
-            uri = f'https://api.football-data.org/v4/teams/{team_id}/matches'
-            headers = {'X-Auth-Token': self.api_key}
-            data = self.get_data_with_retries(uri, headers)
-            if data:
-                matches = data.get('matches', [])
-                history = [
-                    (match['homeTeam']['id'], match['score']['fullTime']['home'], match['score']['fullTime']['away'])
-                    if match['homeTeam']['id'] == team_id else
-                    (match['awayTeam']['id'], match['score']['fullTime']['away'], match['score']['fullTime']['home'])
-                    for match in matches[:limit]
-                    if match['score']['fullTime']['home'] is not None and match['score']['fullTime']['away'] is not None
-                ]
-                if len(history) < limit:
-                    logging.warning(f"获取的历史比赛数据不足，仅获取到 {len(history)} 场比赛。")
-                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-                try:
-                    joblib.dump(history, cache_file)
-                    logging.info(f"Saved team history to cache: {cache_file}")
-                except Exception as e:
-                    logging.error(f"写入缓存文件失败: {e}")
-                return history[:limit]
-            else:
-                logging.error("无法获取历史比赛数据")
-                st.error("无法获取历史比赛数据")
-                return []
+    def get_team_matches(self, team_id, venue=None):
+        """
+        获取某个球队在特定场地（主场或客场）的所有比赛数据
+        """
+        url = f'https://api.football-data.org/v4/teams/{team_id}/matches'
+        headers = {'X-Auth-Token': self.api_key}
+        params = {'venue': venue} if venue else None  # 添加 params 参数
+        return self.get_data_with_retries(url, headers, params=params)  # 传递 params 参数
+
+    def get_league_matches(self, league_id):
+        """
+        获取某个联赛的所有比赛数据
+        """
+        url = f'https://api.football-data.org/v4/competitions/{league_id}/matches'
+        headers = {'X-Auth-Token': self.api_key}
+        return self.get_data_with_retries(url, headers)
 
 # 初始化 DataFetcher 实例
 fetcher = DataFetcher(API_KEY)
@@ -100,23 +94,57 @@ def cache_get_teams_in_league(api_key, league_id):
     return fetcher.get_teams_in_league(league_id)
 
 @st.cache_data(ttl=3600)
-def cache_get_team_history(api_key, team_id, limit=100):
+def cache_get_team_matches(api_key, team_id, venue=None):
     fetcher = DataFetcher(api_key)
-    return fetcher.get_team_history(team_id, limit)
+    return fetcher.get_team_matches(team_id, venue)
+
+@st.cache_data(ttl=3600)
+def cache_get_league_matches(api_key, league_id):
+    fetcher = DataFetcher(api_key)
+    return fetcher.get_league_matches(league_id)
+
+def calculate_average_goals_for_team(matches, team_id, venue=None):
+    """
+    计算某个球队在特定场地（主场或客场）的场均进球数和丢球数
+    """
+    goals_scored = []
+    goals_conceded = []
+
+    for match in matches['matches']:
+        if venue and match['homeTeam']['id'] != team_id and match['awayTeam']['id'] != team_id:
+            continue
+
+        # 检查比赛结果是否有效
+        if match['score']['fullTime']['home'] is None or match['score']['fullTime']['away'] is None:
+            continue  # 跳过无效比赛
+
+        if match['homeTeam']['id'] == team_id:
+            goals_scored.append(match['score']['fullTime']['home'])
+            goals_conceded.append(match['score']['fullTime']['away'])
+        elif match['awayTeam']['id'] == team_id:
+            goals_scored.append(match['score']['fullTime']['away'])
+            goals_conceded.append(match['score']['fullTime']['home'])
+
+    # 过滤掉 None 值
+    goals_scored = [g for g in goals_scored if g is not None]
+    goals_conceded = [g for g in goals_conceded if g is not None]
+
+    avg_goals_scored = np.mean(goals_scored) if goals_scored else 0
+    avg_goals_conceded = np.mean(goals_conceded) if goals_conceded else 0
+    return avg_goals_scored, avg_goals_conceded
+
+def calculate_league_average_goals(league_matches):
+    """
+    计算整个联盟的主场场均进球数和丢球数
+    """
+    home_goals = [match['score']['fullTime']['home'] for match in league_matches['matches'] if match['score']['fullTime']['home'] is not None]
+    away_goals = [match['score']['fullTime']['away'] for match in league_matches['matches'] if match['score']['fullTime']['away'] is not None]
+    avg_home_goals = np.mean(home_goals) if home_goals else 0
+    avg_away_goals = np.mean(away_goals) if away_goals else 0
+    return avg_home_goals, avg_away_goals
 
 def poisson_prediction(avg_goals, max_goals=10):
     return [poisson.pmf(i, avg_goals) for i in range(max_goals + 1)]
-
-def calculate_weighted_average_goals(history, n=100):
-    if len(history) == 0:
-        return 0
-    recent_performances = history[-n:]
-    return np.mean([match[1] for match in recent_performances])
-
-def calculate_average_goals(home_history, away_history):
-    avg_home_goals = calculate_weighted_average_goals(home_history)
-    avg_away_goals = calculate_weighted_average_goals(away_history)
-    return avg_home_goals, avg_away_goals
 
 def calculate_total_goals_prob(home_goals_prob, away_goals_prob):
     max_goals = len(home_goals_prob) + len(away_goals_prob) - 2
@@ -148,28 +176,6 @@ def calculate_odds(home_win_prob, draw_prob, away_win_prob):
     away_odds = 1 / away_win_prob if away_win_prob > 0 else float('inf')
     return home_odds, draw_odds, away_odds
 
-def train_models(history):
-    goals = [match[1] for match in history]
-    X = np.arange(len(goals)).reshape(-1, 1)
-    y = np.array(goals)
-
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
-
-    models = {
-        "RandomForest": RandomForestRegressor(n_estimators=100),
-        "XGBoost": xgb.XGBRegressor(n_estimators=100, objective='reg:squarederror'),
-        "LightGBM": lgb.LGBMRegressor(n_estimators=100, min_data_in_leaf=5)
-    }
-
-    for name, model in models.items():
-        model.fit(X, y)
-    return models
-
-def predict_goals(models, X):
-    predictions = {name: model.predict(X) for name, model in models.items()}
-    return np.mean(list(predictions.values()))
-
 def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, predicted_away_goals, home_win_prob, draw_prob, away_win_prob):
     analysis = f"""
     **AI 分析报告**
@@ -184,8 +190,6 @@ def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, p
     """
     return analysis
 
-    # 提取并返回生成的报告
-    return response['choices'][0]['message']['content'].strip()
 st.title('⚽ 足球比赛预测')
 
 # 设置侧边栏参数
@@ -213,21 +217,27 @@ if leagues_data:
                 home_team_id = teams[selected_home_team_name]
                 away_team_id = teams[selected_away_team_name]
 
-                home_history = cache_get_team_history(API_KEY, home_team_id, limit=6)
-                away_history = cache_get_team_history(API_KEY, away_team_id, limit=6)
-                avg_home_goals, avg_away_goals = calculate_average_goals(home_history, away_history)
+                # 获取主队和客队的比赛数据
+                home_team_home_matches = cache_get_team_matches(API_KEY, home_team_id, venue='HOME')
+                away_team_away_matches = cache_get_team_matches(API_KEY, away_team_id, venue='AWAY')
 
-                home_models = train_models(home_history)
-                away_models = train_models(away_history)
+                # 计算主队和客队的场均进球数和丢球数
+                home_avg_goals_scored, home_avg_goals_conceded = calculate_average_goals_for_team(home_team_home_matches, home_team_id, venue='HOME')
+                away_avg_goals_scored, away_avg_goals_conceded = calculate_average_goals_for_team(away_team_away_matches, away_team_id, venue='AWAY')
 
-                predicted_home_goals = predict_goals(home_models, [[0]])
-                predicted_away_goals = predict_goals(away_models, [[0]])
+                # 获取整个联盟的比赛数据
+                league_matches = cache_get_league_matches(API_KEY, league_id)
+                league_avg_home_goals, league_avg_away_goals = calculate_league_average_goals(league_matches)
 
-                st.markdown(f"<h3 style='color: green;'>预测主队进球数: {predicted_home_goals:.2f}</h3>", unsafe_allow_html=True)
-                st.markdown(f"<h3 style='color: purple;'>预测客队进球数: {predicted_away_goals:.2f}</h3>", unsafe_allow_html=True)
+                # 计算主队和客队的预期进球数
+                home_expected_goals = home_avg_goals_scored * away_avg_goals_conceded / league_avg_away_goals
+                away_expected_goals = away_avg_goals_scored * home_avg_goals_conceded / league_avg_home_goals
 
-                home_goals_prob = poisson_prediction(predicted_home_goals)
-                away_goals_prob = poisson_prediction(predicted_away_goals)
+                st.markdown(f"<h3 style='color: green;'>预测主队进球数: {home_expected_goals:.2f}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='color: purple;'>预测客队进球数: {away_expected_goals:.2f}</h3>", unsafe_allow_html=True)
+
+                home_goals_prob = poisson_prediction(home_expected_goals)
+                away_goals_prob = poisson_prediction(away_expected_goals)
                 home_goals_prob = np.array(home_goals_prob)
                 away_goals_prob = np.array(away_goals_prob)
                 home_goals_prob /= home_goals_prob.sum()
@@ -263,7 +273,7 @@ if leagues_data:
 
                 # 根据概率提供博彩建议
                 total_goals_line_int = int(total_goals_line)
-                total_goals_line_ceil = np.ceil(total_goals_line* 4) / 4  # 向上取整以适应0.25, 0.5的盘口阶段
+                total_goals_line_ceil = np.ceil(total_goals_line * 4) / 4  # 向上取整以适应0.25, 0.5的盘口阶段
 
                 home_odds, draw_odds, away_odds = calculate_odds(home_win_prob, draw_prob, away_win_prob)
 
@@ -281,12 +291,12 @@ if leagues_data:
                     st.write("建议：根据当前概率，没有明确的投注方向")
 
                 # 比较主客队预测进球数，提供让球建议
-                if predicted_home_goals + point_handicap > predicted_away_goals:
+                if home_expected_goals + point_handicap > away_expected_goals:
                     if home_win_prob > 0.5:  # 如果主队胜率超过50%，则建议投注主队
                         st.write(f"建议：投注主队让{point_handicap}球胜")
                     else:
                         st.write("建议：考虑其他投注选项，主队胜率不高")
-                elif predicted_home_goals - point_handicap < predicted_away_goals:
+                elif home_expected_goals - point_handicap < away_expected_goals:
                     if away_win_prob > 0.5:  # 如果客队胜率超过50%，则建议投注客队
                         st.write(f"建议：投注客队受{point_handicap}球胜")
                     else:
@@ -405,8 +415,8 @@ if leagues_data:
                 ai_analysis = generate_ai_analysis(
                     selected_home_team_name,
                     selected_away_team_name,
-                    predicted_home_goals,
-                    predicted_away_goals,
+                    home_expected_goals,
+                    away_expected_goals,
                     home_win_prob,
                     draw_prob,
                     away_win_prob
