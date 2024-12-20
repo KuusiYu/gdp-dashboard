@@ -190,7 +190,7 @@ def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, p
     """
     return analysis
 
-st.title('足球比赛预测器')
+st.title('⚽足球比赛预测器')
 
 # 设置侧边栏参数
 st.sidebar.title("输入参数设置")
