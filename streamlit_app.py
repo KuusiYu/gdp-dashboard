@@ -402,7 +402,7 @@ if leagues_data:
                     marker_color='pink',
                     orientation='h',
                     text=home_goal_probs_df['Probability'],
-                    texttemplate='%{text:.2f}',  # 显示概率，保留两位小数
+                    texttemplate='%{text:.3f}',  # 显示概率，保留两位小数
                     textposition='outside'
                 ))
 
@@ -414,7 +414,7 @@ if leagues_data:
                     marker_color='lightgreen',
                     orientation='h',
                     text=away_goal_probs_df['Probability'],  # 显示概率，去掉负号
-                    texttemplate='%{text:.2f}',  # 显示概率，保留两位小数
+                    texttemplate='%{text:.3f}',  # 显示概率，保留两位小数
                     textposition='outside',
                     yaxis='y2'
                 ))
