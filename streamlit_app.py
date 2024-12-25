@@ -80,6 +80,14 @@ class DataFetcher:
         headers = {'X-Auth-Token': self.api_key}
         return self.get_data_with_retries(url, headers)
 
+    def get_league_standings(self, league_id):
+        """
+        获取联赛积分榜
+        """
+        url = f'https://api.football-data.org/v4/competitions/{league_id}/standings'
+        headers = {'X-Auth-Token': self.api_key}
+        return self.get_data_with_retries(url, headers)
+
 # 初始化 DataFetcher 实例
 fetcher = DataFetcher(API_KEY)
 
@@ -102,6 +110,11 @@ def cache_get_team_matches(api_key, team_id, venue=None):
 def cache_get_league_matches(api_key, league_id):
     fetcher = DataFetcher(api_key)
     return fetcher.get_league_matches(league_id)
+
+@st.cache_data(ttl=3600)
+def cache_get_league_standings(api_key, league_id):
+    fetcher = DataFetcher(api_key)
+    return fetcher.get_league_standings(league_id)
 
 def calculate_average_goals_for_team(matches, team_id, venue=None):
     """
@@ -143,7 +156,7 @@ def calculate_league_average_goals(league_matches):
     avg_away_goals = np.mean(away_goals) if away_goals else 0
     return avg_home_goals, avg_away_goals
 
-def poisson_prediction(avg_goals, max_goals=10):
+def poisson_prediction(avg_goals, max_goals=7):
     return [poisson.pmf(i, avg_goals) for i in range(max_goals + 1)]
 
 def calculate_total_goals_prob(home_goals_prob, away_goals_prob):
@@ -226,6 +239,42 @@ def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, p
     """
     return analysis
 
+def bayesian_adjustment(prior_mean, prior_var, observed_mean, observed_var):
+    """
+    使用贝叶斯方法调整泊松分布的平均值
+    """
+    posterior_mean = (prior_var * observed_mean + observed_var * prior_mean) / (prior_var + observed_var)
+    posterior_var = (prior_var * observed_var) / (prior_var + observed_var)
+    return posterior_mean, posterior_var
+
+def calculate_exact_score_probabilities(home_goals_prob, away_goals_prob):
+    """
+    计算精准比分概率
+    """
+    exact_score_probs = {}
+    for i, home_prob in enumerate(home_goals_prob):
+        for j, away_prob in enumerate(away_goals_prob):
+            score = f"{i}-{j}"
+            exact_score_probs[score] = home_prob * away_prob
+    return exact_score_probs
+
+def calculate_odd_even_probabilities(home_goals_prob, away_goals_prob):
+    """
+    计算单双球概率
+    """
+    odd_prob = 0
+    even_prob = 0
+
+    for i, home_prob in enumerate(home_goals_prob):
+        for j, away_prob in enumerate(away_goals_prob):
+            total_goals = i + j
+            if total_goals % 2 == 0:
+                even_prob += home_prob * away_prob
+            else:
+                odd_prob += home_prob * away_prob
+
+    return odd_prob, even_prob
+
 st.title('⚽ 足球比赛预测')
 
 # 设置侧边栏参数
@@ -268,6 +317,57 @@ if leagues_data:
                 # 计算主队和客队的预期进球数
                 home_expected_goals = home_avg_goals_scored * away_avg_goals_conceded / league_avg_away_goals
                 away_expected_goals = away_avg_goals_scored * home_avg_goals_conceded / league_avg_home_goals
+
+                # 使用贝叶斯方法调整预期进球数
+                prior_var = 1.0  # 先验方差
+                observed_var = 0.5  # 观测方差
+                home_expected_goals, _ = bayesian_adjustment(home_expected_goals, prior_var, home_avg_goals_scored, observed_var)
+                away_expected_goals, _ = bayesian_adjustment(away_expected_goals, prior_var, away_avg_goals_scored, observed_var)
+
+                # 获取并显示联赛积分榜
+                standings_data = cache_get_league_standings(API_KEY, league_id)
+                if standings_data:
+                    standings = standings_data['standings'][0]['table']
+
+                    # 转换为 DataFrame
+                    standings_df = pd.DataFrame(standings)
+
+                    # 提取嵌套字段 'team.name' 并添加为新列
+                    standings_df['球队名称'] = standings_df['team'].apply(lambda x: x['name'])
+    
+                    # 计算额外数据
+                    standings_df['赛'] = standings_df['playedGames']
+                    standings_df['胜'] = standings_df['won']
+                    standings_df['平'] = standings_df['draw']
+                    standings_df['负'] = standings_df['lost']
+                    standings_df['得'] = standings_df['goalsFor']
+                    standings_df['失'] = standings_df['goalsAgainst']
+                    standings_df['净'] = standings_df['goalDifference']
+                    standings_df['胜%'] = standings_df['胜'] / standings_df['赛']
+                    standings_df['平%'] = standings_df['平'] / standings_df['赛']
+                    standings_df['负%'] = standings_df['负'] / standings_df['赛']
+                    standings_df['均得'] = standings_df['得'] / standings_df['赛']
+                    standings_df['均失'] = standings_df['失'] / standings_df['赛']
+
+                    # 保留并重命名需要展示的列
+                    standings_df = standings_df[['position', '球队名称', '赛', '胜', '平', '负', '得', '失', '净', '胜%', '平%', '负%', '均得', '均失', 'points']]
+                    standings_df.rename(columns={
+                        'position': '排名',
+                        'points': '积分'
+                    }, inplace=True)
+
+                    # 格式化百分比显示为两位小数
+                    standings_df['胜%'] = standings_df['胜%'].apply(lambda x: f"{x:.1%}")
+                    standings_df['平%'] = standings_df['平%'].apply(lambda x: f"{x:.1%}")
+                    standings_df['负%'] = standings_df['负%'].apply(lambda x: f"{x:.1%}")
+                    standings_df['均得'] = standings_df['均得'].apply(lambda x: f"{x:.2f}")
+                    standings_df['均失'] = standings_df['均失'].apply(lambda x: f"{x:.2f}")
+
+                    # 使用 Streamlit 显示表格
+                    st.write("### 联赛积分表")
+                    st.dataframe(standings_df, use_container_width=True)
+                else:
+                    st.error("无法获取联赛积分榜数据。")
 
                 st.markdown(f"<h3 style='color: green;'>预测主队进球数: {home_expected_goals:.2f}</h3>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='color: purple;'>预测客队进球数: {away_expected_goals:.2f}</h3>", unsafe_allow_html=True)
@@ -322,7 +422,7 @@ if leagues_data:
                 # 依据期望进球数和标准差判断建议
                 if expected_goals > total_goals_line + 0.5:
                     st.write(f"建议：投注总进球数大于{total_goals_line}的盘口")
-                elif expected_goals < total_goals_line - 0.5:
+                elif expected_goals < total_goals_line:
                     st.write(f"建议：投注总进球数小于{total_goals_line}的盘口")
                 else:
                     st.write("建议：根据当前概率，没有明确的投注方向")
@@ -402,7 +502,7 @@ if leagues_data:
                     marker_color='pink',
                     orientation='h',
                     text=home_goal_probs_df['Probability'],
-                    texttemplate='%{text:.3f}',  # 显示概率，保留两位小数
+                    texttemplate='%{text:.2f}',  # 显示概率，保留两位小数
                     textposition='outside'
                 ))
 
@@ -414,7 +514,7 @@ if leagues_data:
                     marker_color='lightgreen',
                     orientation='h',
                     text=away_goal_probs_df['Probability'],  # 显示概率，去掉负号
-                    texttemplate='%{text:.3f}',  # 显示概率，保留两位小数
+                    texttemplate='%{text:.2f}',  # 显示概率，保留两位小数
                     textposition='outside',
                     yaxis='y2'
                 ))
@@ -451,6 +551,18 @@ if leagues_data:
                 fig.update_xaxes(dtick=1)
  
                 st.plotly_chart(fig)
+
+                # 精准比分概率
+                exact_score_probs = calculate_exact_score_probabilities(home_goals_prob, away_goals_prob)
+                exact_score_probs_df = pd.DataFrame(list(exact_score_probs.items()), columns=["比分", "概率"])
+                exact_score_probs_df = exact_score_probs_df.sort_values(by="概率", ascending=False).head(10)
+                st.write("精准比分概率（前10）：")
+                st.dataframe(exact_score_probs_df)
+
+                # 单双球概率
+                odd_prob, even_prob = calculate_odd_even_probabilities(home_goals_prob, away_goals_prob)
+                st.write(f"单球概率: {odd_prob:.2%}")
+                st.write(f"双球概率: {even_prob:.2%}")
 
                 # AI 分析报告
                 ai_analysis = generate_ai_analysis(
