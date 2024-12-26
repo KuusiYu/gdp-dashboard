@@ -227,15 +227,11 @@ def calculate_handicap_suggestion(home_goals_prob, away_goals_prob, point_handic
 
 def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, predicted_away_goals, home_win_prob, draw_prob, away_win_prob):
     analysis = f"""
-    **AI 分析报告**
-
+    **受/让球胜率预测**
     根据模型预测，{home_team_name} 的预期进球数为 {predicted_home_goals:.2f}，而 {away_team_name} 的预期进球数为 {predicted_away_goals:.2f}。
-
-    - **主队胜率**: {home_win_prob:.2%}
+    - **主队受/让球胜率**: {home_win_prob:.2%}
     - **平局概率**: {draw_prob:.2%}
-    - **客队胜率**: {away_win_prob:.2%}
-
-    综合来看，如果主队的进球数高于客队，主队更有可能获胜；反之，客队更有可能获胜。如果两队进球数接近，则比赛更有可能以平局结束。
+    - **客队受/让球胜率**: {away_win_prob:.2%}
     """
     return analysis
 
@@ -298,7 +294,7 @@ if leagues_data:
         total_goals_line = st.sidebar.number_input('输入大小球盘口', min_value=0.0, max_value=10.0, value=2.5)
 
         if confirm_button:
-            with st.spinner("请耐心等待30秒，程序正在运行。"):
+            with st.spinner("请耐心等待，程序正在运行。"):
                 home_team_id = teams[selected_home_team_name]
                 away_team_id = teams[selected_away_team_name]
 
@@ -369,8 +365,13 @@ if leagues_data:
                 else:
                     st.error("无法获取联赛积分榜数据。")
 
-                st.markdown(f"<h3 style='color: green;'>预测主队进球数: {home_expected_goals:.2f}</h3>", unsafe_allow_html=True)
-                st.markdown(f"<h3 style='color: purple;'>预测客队进球数: {away_expected_goals:.2f}</h3>", unsafe_allow_html=True)
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown(f"<h4 style='color: orange;'>预测{selected_home_team_name}进球数: {home_expected_goals:.2f}</h4>", unsafe_allow_html=True)
+
+                with col2:
+                    st.markdown(f"<h4 style='color: purple;'>预测{selected_away_team_name}进球数: {away_expected_goals:.2f}</h4>", unsafe_allow_html=True)
 
                 home_goals_prob = poisson_prediction(home_expected_goals)
                 away_goals_prob = poisson_prediction(away_expected_goals)
@@ -414,9 +415,19 @@ if leagues_data:
 
                 home_odds, draw_odds, away_odds = calculate_odds(home_win_prob, draw_prob, away_win_prob)
 
-                st.write(f"主队胜的概率: {home_win_prob:.2%}")
-                st.write(f"平局的概率: {draw_prob:.2%}")
-                st.write(f"客队胜的概率: {away_win_prob:.2%}")
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.markdown(f"<h4 style='font-size: 40px; color: lightgreen;'>胜</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 20px; color: gray;'>{home_win_prob:.2%}</h4>", unsafe_allow_html=True)
+
+                with col2:
+                    st.markdown(f"<h4 style='font-size: 40px; color: navy;'>平</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 20px; color: gray;'>{draw_prob:.2%}</h4>", unsafe_allow_html=True)
+
+                with col3:
+                    st.markdown(f"<h4 style='font-size: 40px; color: pink;'>负</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 20px; color: gray;'>{away_win_prob:.2%}</h4>", unsafe_allow_html=True)
 
                 total_goals_line_int = int(total_goals_line)
                 # 依据期望进球数和标准差判断建议
@@ -444,6 +455,27 @@ if leagues_data:
                         st.write(f"建议：投注主队受{point_handicap}球胜")
                     else:
                         st.write("建议：考虑其他投注选项，胜负难以判断")
+
+                # 单双球概率
+                odd_prob, even_prob = calculate_odd_even_probabilities(home_goals_prob, away_goals_prob)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"单球概率: {odd_prob:.2%}")
+                with col2:
+                    st.write(f"双球概率: {even_prob:.2%}")
+
+                # AI 分析报告
+                ai_analysis = generate_ai_analysis(
+                    selected_home_team_name,
+                    selected_away_team_name,
+                    home_expected_goals,
+                    away_expected_goals,
+                    home_win_prob,
+                    draw_prob,
+                    away_win_prob
+                )
+                st.markdown(ai_analysis)
 
                 # 比分概率热力图
                 score_probs = score_probability(home_goals_prob, away_goals_prob)
@@ -551,30 +583,6 @@ if leagues_data:
                 fig.update_xaxes(dtick=1)
  
                 st.plotly_chart(fig)
-
-                # 精准比分概率
-                exact_score_probs = calculate_exact_score_probabilities(home_goals_prob, away_goals_prob)
-                exact_score_probs_df = pd.DataFrame(list(exact_score_probs.items()), columns=["比分", "概率"])
-                exact_score_probs_df = exact_score_probs_df.sort_values(by="概率", ascending=False).head(10)
-                st.write("精准比分概率（前10）：")
-                st.dataframe(exact_score_probs_df)
-
-                # 单双球概率
-                odd_prob, even_prob = calculate_odd_even_probabilities(home_goals_prob, away_goals_prob)
-                st.write(f"单球概率: {odd_prob:.2%}")
-                st.write(f"双球概率: {even_prob:.2%}")
-
-                # AI 分析报告
-                ai_analysis = generate_ai_analysis(
-                    selected_home_team_name,
-                    selected_away_team_name,
-                    home_expected_goals,
-                    away_expected_goals,
-                    home_win_prob,
-                    draw_prob,
-                    away_win_prob
-                )
-                st.markdown(ai_analysis)
 
         else:
             st.error("未能加载该联赛的球队，请检查 API。")
