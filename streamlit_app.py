@@ -200,7 +200,7 @@ def calculate_odds(home_win_prob, draw_prob, away_win_prob):
 def calculate_handicap_suggestion(home_goals_prob, away_goals_prob, point_handicap):
     home_wins = 0
     away_wins = 0
-    simulations = 73300  # 增加模拟次数，提高结果的精确度
+    simulations = 55555  # 增加模拟次数，提高结果的精确度
 
     for _ in range(simulations):
         home_goals = np.random.choice(range(len(home_goals_prob)), p=home_goals_prob)
