@@ -122,6 +122,10 @@ def calculate_average_goals_for_team(matches, team_id, venue=None):
     """
     goals_scored = []
     goals_conceded = []
+    
+    if not matches or 'matches' not in matches:
+        st.warning(f"警告：没有找到有效的比赛数据")
+        return 0, 0
 
     for match in matches['matches']:
         if venue and match['homeTeam']['id'] != team_id and match['awayTeam']['id'] != team_id:
@@ -141,19 +145,39 @@ def calculate_average_goals_for_team(matches, team_id, venue=None):
     # 过滤掉 None 值
     goals_scored = [g for g in goals_scored if g is not None]
     goals_conceded = [g for g in goals_conceded if g is not None]
+    
+    # 如果找不到比赛数据，显示警告
+    if not goals_scored:
+        st.warning(f"警告：找不到{team_id}在{'主场' if venue == 'HOME' else '客场'}的有效比赛数据")
+        return 0, 0
 
-    avg_goals_scored = np.mean(goals_scored) if goals_scored else 0
-    avg_goals_conceded = np.mean(goals_conceded) if goals_conceded else 0
+    avg_goals_scored = np.mean(goals_scored) 
+    avg_goals_conceded = np.mean(goals_conceded)
     return avg_goals_scored, avg_goals_conceded
 
 def calculate_league_average_goals(league_matches):
     """
     计算整个联盟的主场场均进球数和丢球数
     """
-    home_goals = [match['score']['fullTime']['home'] for match in league_matches['matches'] if match['score']['fullTime']['home'] is not None]
-    away_goals = [match['score']['fullTime']['away'] for match in league_matches['matches'] if match['score']['fullTime']['away'] is not None]
-    avg_home_goals = np.mean(home_goals) if home_goals else 0
-    avg_away_goals = np.mean(away_goals) if away_goals else 0
+    home_goals = []
+    away_goals = []
+    
+    if not league_matches or 'matches' not in league_matches:
+        st.warning("警告：没有找到有效的联赛比赛数据")
+        return 1.5, 1.2  # 返回默认平均值
+
+    for match in league_matches['matches']:
+        if match['score']['fullTime']['home'] is not None:
+            home_goals.append(match['score']['fullTime']['home'])
+        if match['score']['fullTime']['away'] is not None:
+            away_goals.append(match['score']['fullTime']['away'])
+            
+    # 如果没有数据，使用默认值
+    if not home_goals or not away_goals:
+        return 1.5, 1.2  # 返回默认平均值
+        
+    avg_home_goals = np.mean(home_goals)
+    avg_away_goals = np.mean(away_goals)
     return avg_home_goals, avg_away_goals
 
 def poisson_prediction(avg_goals, max_goals=7):
@@ -229,9 +253,14 @@ def generate_ai_analysis(home_team_name, away_team_name, predicted_home_goals, p
     analysis = f"""
     **受/让球胜率预测**
     根据模型预测，{home_team_name} 的预期进球数为 {predicted_home_goals:.2f}，而 {away_team_name} 的预期进球数为 {predicted_away_goals:.2f}。
-    - **主队受/让球胜率**: {home_win_prob:.2%}
+    - **主队胜率**: {home_win_prob:.2%}
     - **平局概率**: {draw_prob:.2%}
-    - **客队受/让球胜率**: {away_win_prob:.2%}
+    - **客队胜率**: {away_win_prob:.2%}
+    
+    **投注建议**:
+    1. 胜平负策略：如果主队胜率高于55%，可考虑支持主队胜
+    2. 比分策略：关注{max(1, int(predicted_home_goals))}-{max(0, int(predicted_away_goals))}等核心比分
+    3. 总进球策略：考虑支持总进球数 {'大' if predicted_home_goals + predicted_away_goals > 2.5 else '小'}于2.5球的选项
     """
     return analysis
 
@@ -239,8 +268,12 @@ def bayesian_adjustment(prior_mean, prior_var, observed_mean, observed_var):
     """
     使用贝叶斯方法调整泊松分布的平均值
     """
-    posterior_mean = (prior_var * observed_mean + observed_var * prior_mean) / (prior_var + observed_var)
-    posterior_var = (prior_var * observed_var) / (prior_var + observed_var)
+    denominator = prior_var + observed_var
+    if denominator <= 0:  # 防止除0错误
+        return prior_mean, prior_var
+        
+    posterior_mean = (prior_var * observed_mean + observed_var * prior_mean) / denominator
+    posterior_var = (prior_var * observed_var) / denominator
     return posterior_mean, posterior_var
 
 def calculate_exact_score_probabilities(home_goals_prob, away_goals_prob):
@@ -271,10 +304,15 @@ def calculate_odd_even_probabilities(home_goals_prob, away_goals_prob):
 
     return odd_prob, even_prob
 
-st.title('⚽ 足球比赛预测')
+def get_top_scores(exact_score_probs, n=5):
+    """获取概率最高的前n个比分"""
+    sorted_scores = sorted(exact_score_probs.items(), key=lambda x: x[1], reverse=True)
+    return sorted_scores[:n]
+
+st.title('⚽ 足球比赛预测分析')
 
 # 设置侧边栏参数
-st.sidebar.title("输入参数设置")
+st.sidebar.title("比赛参数设置")
 
 # 获取联赛数据
 leagues_data = cache_get_leagues(API_KEY)
@@ -289,12 +327,16 @@ if leagues_data:
         selected_home_team_name = st.sidebar.selectbox('选择主队', list(teams.keys()))
         selected_away_team_name = st.sidebar.selectbox('选择客队', list(teams.keys()))
 
-        confirm_button = st.sidebar.button("确认选择")
-        point_handicap = st.sidebar.number_input('输入受让/让球盘口，主让球为负，客让球为正', min_value=-5.0, max_value=5.0, value=0.0)
-        total_goals_line = st.sidebar.number_input('输入大小球盘口', min_value=0.0, max_value=10.0, value=2.5)
+        # 让用户选择分析维度
+        analysis_option = st.sidebar.selectbox('分析维度', ['基础预测', '进阶分析', '投注策略'])
+
+        point_handicap = st.sidebar.number_input('让球盘口（负数为主让，正数为客让）', min_value=-5.0, max_value=5.0, value=0.0)
+        total_goals_line = st.sidebar.number_input('大小球盘口', min_value=0.0, max_value=10.0, value=2.5)
+
+        confirm_button = st.sidebar.button("开始分析")
 
         if confirm_button:
-            with st.spinner("请耐心等待，程序正在运行。"):
+            with st.spinner(f"正在分析 {selected_home_team_name} vs {selected_away_team_name}..."):
                 home_team_id = teams[selected_home_team_name]
                 away_team_id = teams[selected_away_team_name]
 
@@ -311,8 +353,14 @@ if leagues_data:
                 league_avg_home_goals, league_avg_away_goals = calculate_league_average_goals(league_matches)
 
                 # 计算主队和客队的预期进球数
-                home_expected_goals = home_avg_goals_scored * away_avg_goals_conceded / league_avg_away_goals
-                away_expected_goals = away_avg_goals_scored * home_avg_goals_conceded / league_avg_home_goals
+                home_expected_goals = home_avg_goals_scored
+                away_expected_goals = away_avg_goals_scored
+                
+                # 应用调整因子（避免除0错误）
+                if league_avg_away_goals > 0:
+                    home_expected_goals = home_avg_goals_scored * (away_avg_goals_conceded / league_avg_away_goals)
+                if league_avg_home_goals > 0:
+                    away_expected_goals = away_avg_goals_scored * (home_avg_goals_conceded / league_avg_home_goals)
 
                 # 使用贝叶斯方法调整预期进球数
                 prior_var = 1.0  # 先验方差
@@ -322,57 +370,60 @@ if leagues_data:
 
                 # 获取并显示联赛积分榜
                 standings_data = cache_get_league_standings(API_KEY, league_id)
-                if standings_data:
-                    standings = standings_data['standings'][0]['table']
+                if standings_data and standings_data.get('standings'):
+                    # 确保standings列表不为空
+                    if standings_data['standings']:
+                        standings = standings_data['standings'][0].get('table', [])
+                        
+                        if standings:
+                            # 转换为 DataFrame
+                            standings_df = pd.DataFrame(standings)
 
-                    # 转换为 DataFrame
-                    standings_df = pd.DataFrame(standings)
+                            # 提取嵌套字段 'team.name' 并添加为新列
+                            standings_df['球队名称'] = standings_df['team'].apply(lambda x: x['name'])
+            
+                            # 计算额外数据
+                            standings_df['赛'] = standings_df['playedGames']
+                            standings_df['胜'] = standings_df['won']
+                            standings_df['平'] = standings_df['draw']
+                            standings_df['负'] = standings_df['lost']
+                            standings_df['得'] = standings_df['goalsFor']
+                            standings_df['失'] = standings_df['goalsAgainst']
+                            standings_df['净'] = standings_df['goalDifference']
+                            standings_df['均得'] = standings_df['得'] / standings_df['赛']
+                            standings_df['均失'] = standings_df['失'] / standings_df['赛']
+                            standings_df['积分'] = standings_df['points']
 
-                    # 提取嵌套字段 'team.name' 并添加为新列
-                    standings_df['球队名称'] = standings_df['team'].apply(lambda x: x['name'])
-    
-                    # 计算额外数据
-                    standings_df['赛'] = standings_df['playedGames']
-                    standings_df['胜'] = standings_df['won']
-                    standings_df['平'] = standings_df['draw']
-                    standings_df['负'] = standings_df['lost']
-                    standings_df['得'] = standings_df['goalsFor']
-                    standings_df['失'] = standings_df['goalsAgainst']
-                    standings_df['净'] = standings_df['goalDifference']
-                    standings_df['胜%'] = standings_df['胜'] / standings_df['赛']
-                    standings_df['平%'] = standings_df['平'] / standings_df['赛']
-                    standings_df['负%'] = standings_df['负'] / standings_df['赛']
-                    standings_df['均得'] = standings_df['得'] / standings_df['赛']
-                    standings_df['均失'] = standings_df['失'] / standings_df['赛']
+                            # 格式化数据
+                            standings_df['均得'] = standings_df['均得'].apply(lambda x: f"{x:.2f}")
+                            standings_df['均失'] = standings_df['均失'].apply(lambda x: f"{x:.2f}")
 
-                    # 保留并重命名需要展示的列
-                    standings_df = standings_df[['position', '球队名称', '赛', '胜', '平', '负', '得', '失', '净', '胜%', '平%', '负%', '均得', '均失', 'points']]
-                    standings_df.rename(columns={
-                        'position': '排名',
-                        'points': '积分'
-                    }, inplace=True)
+                            # 保留并重命名需要展示的列
+                            standings_df = standings_df[['position', '球队名称', '赛', '胜', '平', '负', '得', '失', '净', '均得', '均失', '积分']]
+                            standings_df.rename(columns={'position': '排名'}, inplace=True)
 
-                    # 格式化百分比显示为两位小数
-                    standings_df['胜%'] = standings_df['胜%'].apply(lambda x: f"{x:.1%}")
-                    standings_df['平%'] = standings_df['平%'].apply(lambda x: f"{x:.1%}")
-                    standings_df['负%'] = standings_df['负%'].apply(lambda x: f"{x:.1%}")
-                    standings_df['均得'] = standings_df['均得'].apply(lambda x: f"{x:.2f}")
-                    standings_df['均失'] = standings_df['均失'].apply(lambda x: f"{x:.2f}")
-
-                    # 使用 Streamlit 显示表格
-                    st.write("### 联赛积分表")
-                    st.dataframe(standings_df, use_container_width=True)
+                            # 使用 Streamlit 显示表格
+                            st.write("### 联赛积分榜")
+                            st.dataframe(standings_df, use_container_width=True)
+                        else:
+                            st.warning("该联赛积分榜为空")
+                    else:
+                        st.warning("该联赛暂无积分榜数据")
                 else:
-                    st.error("无法获取联赛积分榜数据。")
+                    st.warning("无法获取联赛积分榜数据")
 
+                # 显示关键指标
                 col1, col2 = st.columns(2)
 
                 with col1:
-                    st.markdown(f"<h4 style='color: orange;'>预测{selected_home_team_name}进球数: {home_expected_goals:.2f}</h4>", unsafe_allow_html=True)
+                    st.metric(f"{selected_home_team_name} 预期进球", f"{home_expected_goals:.2f}", 
+                               delta=f"主场均进 {home_avg_goals_scored:.2f} 失 {home_avg_goals_conceded:.2f}")
 
                 with col2:
-                    st.markdown(f"<h4 style='color: purple;'>预测{selected_away_team_name}进球数: {away_expected_goals:.2f}</h4>", unsafe_allow_html=True)
+                    st.metric(f"{selected_away_team_name} 预期进球", f"{away_expected_goals:.2f}", 
+                               delta=f"客场均进 {away_avg_goals_scored:.2f} 失 {away_avg_goals_conceded:.2f}")
 
+                # 进球概率计算
                 home_goals_prob = poisson_prediction(home_expected_goals)
                 away_goals_prob = poisson_prediction(away_expected_goals)
                 home_goals_prob = np.array(home_goals_prob)
@@ -406,66 +457,66 @@ if leagues_data:
                 total_goals_prob = calculate_total_goals_prob(home_goals_prob, away_goals_prob)
                 expected_goals, std_dev = calculate_expected_goals_and_std(total_goals_prob)
 
-                # 计算主队胜、平局和客队胜的概率
-                home_win_prob, draw_prob, away_win_prob = calculate_match_outcome_probabilities(home_goals_prob, away_goals_prob)
-
-                # 根据概率提供博彩建议
-                total_goals_line_int = int(total_goals_line)
-                total_goals_line_ceil = np.ceil(total_goals_line * 4) / 4  # 向上取整以适应0.25, 0.5的盘口阶段
-
-                home_odds, draw_odds, away_odds = calculate_odds(home_win_prob, draw_prob, away_win_prob)
-
+                # 胜率展示
+                st.write("### 胜率预测")
                 col1, col2, col3 = st.columns(3)
 
                 with col1:
-                    st.markdown(f"<h4 style='font-size: 40px; color: lightgreen;'>胜</h4>", unsafe_allow_html=True)
-                    st.markdown(f"<h4 style='font-size: 20px; color: gray;'>{home_win_prob:.2%}</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 40px; color: lightgreen;'>主胜</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 20px;'>{home_win_prob:.2%}</h4>", unsafe_allow_html=True)
 
                 with col2:
-                    st.markdown(f"<h4 style='font-size: 40px; color: navy;'>平</h4>", unsafe_allow_html=True)
-                    st.markdown(f"<h4 style='font-size: 20px; color: gray;'>{draw_prob:.2%}</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 40px; color: navy;'>平局</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 20px;'>{draw_prob:.2%}</h4>", unsafe_allow_html=True)
 
                 with col3:
-                    st.markdown(f"<h4 style='font-size: 40px; color: pink;'>负</h4>", unsafe_allow_html=True)
-                    st.markdown(f"<h4 style='font-size: 20px; color: gray;'>{away_win_prob:.2%}</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 40px; color: pink;'>客胜</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='font-size: 20px;'>{away_win_prob:.2%}</h4>", unsafe_allow_html=True)
 
-                total_goals_line_int = int(total_goals_line)
-                # 依据期望进球数和标准差判断建议
-                if expected_goals > total_goals_line + 0.5:
-                    st.write(f"建议：投注总进球数大于{total_goals_line}的盘口")
-                elif expected_goals < total_goals_line:
-                    st.write(f"建议：投注总进球数小于{total_goals_line}的盘口")
-                else:
-                    st.write("建议：根据当前概率，没有明确的投注方向")
-
-                # 根据盘口计算建议
-                home_win_prob, away_win_prob = calculate_handicap_suggestion(home_goals_prob, away_goals_prob, point_handicap)
-
-                if point_handicap < 0:  # 主队让球
-                    if home_win_prob > 0.5:
-                        st.write(f"建议：投注主队让{abs(point_handicap)}球胜")
-                    elif away_win_prob > 0.5:
-                        st.write(f"建议：投注客队受{abs(point_handicap)}球胜")
-                    else:
-                        st.write("建议：考虑其他投注选项，胜负难以判断")
-                else:  # 客队让球
-                    if away_win_prob > 0.5:
-                        st.write(f"建议：投注客队让{point_handicap}球胜")
-                    elif home_win_prob > 0.5:
-                        st.write(f"建议：投注主队受{point_handicap}球胜")
-                    else:
-                        st.write("建议：考虑其他投注选项，胜负难以判断")
-
-                # 单双球概率
-                odd_prob, even_prob = calculate_odd_even_probabilities(home_goals_prob, away_goals_prob)
+                # 让球分析
+                st.write("### 让球分析")
+                home_handicap_win_prob, away_handicap_win_prob = calculate_handicap_suggestion(home_goals_prob, away_goals_prob, point_handicap)
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.write(f"单球概率: {odd_prob:.2%}")
+                    st.metric(f"{selected_home_team_name} 让{abs(point_handicap) if point_handicap < 0 else '受'+str(point_handicap)}球胜率", 
+                              f"{home_handicap_win_prob:.2%}")
                 with col2:
-                    st.write(f"双球概率: {even_prob:.2%}")
+                    st.metric(f"{selected_away_team_name} {'受'+str(abs(point_handicap)) if point_handicap < 0 else '让'+str(point_handicap)}球胜率", 
+                              f"{away_handicap_win_prob:.2%}")
+                
+                # 投注建议
+                advice = ""
+                if home_handicap_win_prob > 0.6:
+                    advice = f"建议投注主队让{abs(point_handicap) if point_handicap < 0 else '受'+str(point_handicap)}球胜"
+                elif away_handicap_win_prob > 0.6:
+                    advice = f"建议投注客队{'受'+str(abs(point_handicap)) if point_handicap < 0 else '让'+str(point_handicap)}球胜"
+                else:
+                    advice = "建议观望或考虑其他投注选项"
+                
+                st.info(advice)
+
+                # 总进球数分析
+                st.write("### 总进球数分析")
+                over_prob = sum(total_goals_prob[int(np.floor(total_goals_line))+1:])
+                under_prob = sum(total_goals_prob[:int(np.floor(total_goals_line))+1]) - total_goals_prob[int(np.floor(total_goals_line))+1] * (1 - (total_goals_line % 1))
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(f"总进球大 {total_goals_line}", f"{over_prob:.2%}")
+                with col2:
+                    st.metric(f"总进球小 {total_goals_line}", f"{under_prob:.2%}")
+                
+                # 单双球分析
+                odd_prob, even_prob = calculate_odd_even_probabilities(home_goals_prob, away_goals_prob)
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("单数球概率", f"{odd_prob:.2%}")
+                with col2:
+                    st.metric("双数球概率", f"{even_prob:.2%}")
 
                 # AI 分析报告
+                st.write("### AI分析报告")
                 ai_analysis = generate_ai_analysis(
                     selected_home_team_name,
                     selected_away_team_name,
@@ -477,7 +528,19 @@ if leagues_data:
                 )
                 st.markdown(ai_analysis)
 
+                # 预测最可能比分
+                st.write("### 最可能比分")
+                exact_score_probs = calculate_exact_score_probabilities(home_goals_prob, away_goals_prob)
+                top_scores = get_top_scores(exact_score_probs)
+                
+                for i, (score, prob) in enumerate(top_scores):
+                    col1, col2, col3 = st.columns([1, 2, 1])
+                    col1.write(f"第{i+1}可能比分")
+                    col2.metric(score, f"{prob:.2%}")
+                    col3.progress(min(100, int(prob * 200)))  # 放大显示
+
                 # 比分概率热力图
+                st.write("### 比分概率热力图")
                 score_probs = score_probability(home_goals_prob, away_goals_prob)
 
                 # 将 range 对象转换为列表
@@ -502,91 +565,66 @@ if leagues_data:
                 fig.update_layout(
                     title="比分概率热力图",
                     xaxis_title="客队进球数",
-                    yaxis_title="主队进球数"
+                    yaxis_title="主队进球数",
+                    height=600
                 )
                 st.plotly_chart(fig)
 
+                # 两队进球分布对比图
+                st.write("### 两队进球分布对比")
                 # 创建数据框
                 home_goal_probs_df = pd.DataFrame({
                     'Goals': range(len(home_goals_prob)),
                     'Probability': home_goals_prob,
+                    'Team': [f'{selected_home_team_name} (主队)'] * len(home_goals_prob)
                 })
 
                 away_goal_probs_df = pd.DataFrame({
                     'Goals': range(len(away_goals_prob)),
                     'Probability': away_goals_prob,
+                    'Team': [f'{selected_away_team_name} (客队)'] * len(away_goals_prob)
                 })
+                
+                goal_probs_df = pd.concat([home_goal_probs_df, away_goal_probs_df])
+                goal_probs_df = goal_probs_df[goal_probs_df['Probability'] > 0.001]  # 只显示概率大于0.1%的结果
 
-                # 确保概率值在有效范围内
-                home_goal_probs_df['Probability'] = home_goal_probs_df['Probability'].clip(lower=0, upper=1)
-                away_goal_probs_df['Probability'] = away_goal_probs_df['Probability'].clip(lower=0, upper=1)
-                max_goals = max(home_goal_probs_df['Goals'].max(), away_goal_probs_df['Goals'].max()) + 1
-                max_prob = max(home_goal_probs_df['Probability'].max(), away_goal_probs_df['Probability'].max())
-
-                # 创建对称条形图
-                fig = go.Figure()
-
-                # 添加主队条形图（左侧）
-                fig.add_trace(go.Bar(
-                    y=home_goal_probs_df['Goals'],
-                    x=-home_goal_probs_df['Probability'],
-                    name= f'{selected_home_team_name} (主队)',
-                    marker_color='pink',
-                    orientation='h',
-                    text=home_goal_probs_df['Probability'],
-                    texttemplate='%{text:.2f}',  # 显示概率，保留两位小数
-                    textposition='outside'
-                ))
-
-                # 添加客队条形图（右侧）
-                fig.add_trace(go.Bar(
-                    y=away_goal_probs_df['Goals'],
-                    x=away_goal_probs_df['Probability'],
-                    name= f'{selected_away_team_name} (客队)',
-                    marker_color='lightgreen',
-                    orientation='h',
-                    text=away_goal_probs_df['Probability'],  # 显示概率，去掉负号
-                    texttemplate='%{text:.2f}',  # 显示概率，保留两位小数
-                    textposition='outside',
-                    yaxis='y2'
-                ))
-
-                # 更新布局
-                fig.update_layout(
-                    title='两队进球数概率对比',
-                    barmode='group',
-                    yaxis=dict(title='进球数', tick0=0, dtick=1),
-                    yaxis2=dict(title='进球数', tick0=0, dtick=1, overlaying='y', side='right'),
-                    xaxis=dict(title='概率')
-                )
-
-                # 在Streamlit中显示图形
+                fig = px.bar(goal_probs_df, 
+                             x='Goals', 
+                             y='Probability', 
+                             color='Team', 
+                             barmode='group',
+                             text=goal_probs_df['Probability'].apply(lambda x: f'{x:.1%}' if x >= 0.01 else '<1%'),
+                             labels={'Probability': '概率', 'Goals': '进球数'},
+                             height=500)
+                
+                fig.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
+                fig.update_layout(xaxis=dict(tickmode='linear', dtick=1))
                 st.plotly_chart(fig)
 
+                # 总进球数分布图
+                st.write("### 总进球数分布")
                 total_goals_prob_df = pd.DataFrame({
                     "总进球数": np.arange(len(total_goals_prob)),
                     "概率 (%)": total_goals_prob * 100
                 })
-                total_goals_prob_df = total_goals_prob_df[total_goals_prob_df["概率 (%)"] > 0]
+                total_goals_prob_df = total_goals_prob_df[total_goals_prob_df["概率 (%)"] > 0.1]  # 只显示大于0.1%的
                 
                 fig = px.bar(
                     total_goals_prob_df,
                     x="总进球数",
                     y="概率 (%)",
                     title="总进球数概率分布",
-                    color="概率 (%)",  # 根据概率值调整颜色
-                    labels={"总进球数": "总进球数", "概率 (%)": "概率 (%)"},
-                    text_auto=True
+                    color="概率 (%)",
+                    text=total_goals_prob_df["概率 (%)"].apply(lambda x: f'{x:.2f}%'),
+                    labels={"总进球数": "总进球数", "概率 (%)": "概率 (%)"}
                 )
                
                 # 设置x轴的刻度间隔为1
                 fig.update_xaxes(dtick=1)
- 
+                fig.update_traces(textfont_size=12, textangle=0, cliponaxis=False)
+                fig.update_layout(height=500)
                 st.plotly_chart(fig)
-
-        else:
-            st.error("未能加载该联赛的球队，请检查 API。")
     else:
-        st.error("没有可用的联赛数据。")
+        st.error("该联赛暂无球队数据")
 else:
-    st.error("无法连接到足球数据 API。")
+    st.error("无法获取联赛数据，请检查API密钥或网络连接")
