@@ -396,12 +396,12 @@ class AdvancedPredictionModel:
         
     def build_bayesian_network(self):
         # 创建贝叶斯网络
-        model = BayesianNetwork([('Home_Attack', 'Home_Goals'), 
-                                ('Away_Defense', 'Home_Goals'),
-                                ('Away_Attack', 'Away_Goals'),
-                                ('Home_Defense', 'Away_Goals'),
-                                ('Home_Goals', 'Result'),
-                                ('Away_Goals', 'Result')])
+        model = DiscreteBayesianNetwork([('Home_Attack', 'Home_Goals'), 
+                                       ('Away_Defense', 'Home_Goals'),
+                                       ('Away_Attack', 'Away_Goals'),
+                                       ('Home_Defense', 'Away_Goals'),
+                                       ('Home_Goals', 'Result'),
+                                       ('Away_Goals', 'Result')])
         return model
         
     def prepare_input_data(self, home_seq, away_seq):
