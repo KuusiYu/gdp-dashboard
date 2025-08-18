@@ -11,8 +11,6 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from sklearn.utils import deprecated
-import warnings
 import time
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -23,7 +21,7 @@ from keras.layers import LSTM, Dense, Conv1D, MaxPooling1D, Flatten, Reshape, In
 from keras.optimizers import Adam
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from pgmpy.models import BayesianNetwork
+from pgmpy.models import DiscreteBayesianNetwork
 from pgmpy.estimators import MaximumLikelihoodEstimator
 import logging
 
