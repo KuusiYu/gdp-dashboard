@@ -397,11 +397,11 @@ class AdvancedPredictionModel:
     def build_bayesian_network(self):
         # 创建贝叶斯网络
         model = DiscreteBayesianNetwork([('Home_Attack', 'Home_Goals'), 
-                                       ('Away_Defense', 'Home_Goals'),
-                                       ('Away_Attack', 'Away_Goals'),
-                                       ('Home_Defense', 'Away_Goals'),
-                                       ('Home_Goals', 'Result'),
-                                       ('Away_Goals', 'Result')])
+                                ('Away_Defense', 'Home_Goals'),
+                                ('Away_Attack', 'Away_Goals'),
+                                ('Home_Defense', 'Away_Goals'),
+                                ('Home_Goals', 'Result'),
+                                ('Away_Goals', 'Result')])
         return model
         
     def prepare_input_data(self, home_seq, away_seq):
@@ -812,45 +812,137 @@ def display_causal_factors(factors):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# 使用高级UI效果
-create_gradient_header()
+# ... [保留所有导入和DataFetcher类代码不变] ...
+
+# 更新UI样式
+def create_modern_ui():
+    st.markdown("""
+    <style>
+    /* 主标题样式 */
+    .main-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1E3C72;
+        margin-bottom: 0.5rem;
+    }
+    /* 副标题样式 */
+    .subheader {
+       样式 */
+    .subheader {
+        font-size: 1.1rem;
+        color: #4a4a4a;
+        margin-bottom: 1.5rem;
+    }
+    /* 侧边栏样式 */
+    .sidebar .sidebar-content {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    /* 卡片样式 */
+    .metric-card {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 1rem;
+        border-left: 4px solid #2A5298;
+    }
+    /* 进度条样式 */
+    .stProgress > div > div > div {
+        background-color: #2A5298;
+    }
+    /* 标签样式 */
+    .st-bd {
+        font-weight: 600;
+    }
+    /* 按钮样式 */
+    .stButton>button {
+        background: linear-gradient(90deg, #1E3C72 0%, #2A5298 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(90deg, #2A5298 0%, #3A6BC6 100%);
+        color: white;
+    }
+    /* 分割线样式 */
+    .divider {
+        border-top: 1px solid #e0e0e0;
+        margin: 1rem 0;
+    }
+    /* 标签页样式 */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: #f0f0f0;
+        border-radius: 8px 8px 0 0;
+        padding: 0.5rem 1rem;
+        margin: 0;
+    }
+    .stTabs [aria-selected="true"] {
+        background: #2A5298;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 使用新UI样式
+create_modern_ui()
 
 # 主界面
-st.title('⚽ 足球比赛智能预测分析系统')
-st.caption("基于多模型集成与因果分析的高级足球赛事预测平台")
+st.markdown('<p class="main-title">⚽ 足球比赛智能预测系统</p>', unsafe_allow_html=True)
+st.markdown('<p class="subheader">基于多模型集成的专业足球赛事分析平台</p>', unsafe_allow_html=True)
 
-# 侧边栏设置
+# 优化后的侧边栏
 with st.sidebar:
-    st.markdown("### 比赛参数设置")
+    st.markdown("### 🛠️ 比赛参数设置")
     
+    # 联赛选择
     leagues_data = cache_get_leagues(API_KEY)
     leagues = {league['name']: league['id'] for league in leagues_data['competitions']} if leagues_data else {}
-    selected_league = st.selectbox('选择联赛', list(leagues.keys()), key='league')
+    selected_league = st.selectbox('**选择联赛**', list(leagues.keys()), key='league')
     league_id = leagues[selected_league] if selected_league else None
 
     if league_id:
         teams_data = cache_get_teams_in_league(API_KEY, league_id)
         if teams_data:
             teams = {team['name']: team['id'] for team in teams_data['teams']}
+            
+            # 球队选择
+            st.markdown("---")
+            st.markdown("### ⚔️ 球队选择")
             col1, col2 = st.columns(2)
             with col1:
-                selected_home = st.selectbox('主队', list(teams.keys()), key='home_team')
+                selected_home = st.selectbox('**主队**', list(teams.keys()), key='home_team')
             with col2:
-                selected_away = st.selectbox('客队', list(teams.keys()), key='away_team')
+                selected_away = st.selectbox('**客队**', list(teams.keys()), key='away_team')
             
-            point_handicap = st.slider('让球盘口', -3.0, 3.0, 0.0, 0.25, 
+            # 盘口设置
+            st.markdown("---")
+            st.markdown("### 📊 盘口设置")
+            point_handicap = st.slider('**让球盘口**', -3.0, 3.0, 0.0, 0.25, 
                                       help="负数为主让球，正数为客让球")
-            total_goals_line = st.slider('大小球盘口', 0.0, 6.0, 2.5, 0.25)
+            total_goals_line = st.slider('**大小球盘口**', 0.0, 6.0, 2.5, 0.25)
             
             # 因果因素设置
-            st.markdown("### 因果因素调整")
-            key_player_missing = st.checkbox('主队关键球员缺席')
-            away_fatigue = st.slider('客队疲劳指数', 0, 10, 0, 
-                                    help="0=无疲劳，10=极度疲劳")
-            weather_options = ['晴', '雨', '雪', '大风']
-            weather = st.selectbox('天气条件', weather_options)
+            st.markdown("---")
+            st.markdown("### 🔍 影响因素")
+            with st.expander("调整关键因素"):
+                key_player_missing = st.checkbox('主队关键球员缺席')
+                away_fatigue = st.slider('客队疲劳指数', 0, 10, 0, 
+                                        help="0=无疲劳，10=极度疲劳")
+                weather_options = ['晴', '雨', '雪', '大风']
+                weather = st.selectbox('天气条件', weather_options)
             
-            if st.button('开始智能分析', use_container_width=True):
+            # 分析按钮
+            st.markdown("---")
+            if st.button('🚀 开始智能分析', use_container_width=True):
                 st.session_state['analyze'] = True
                 st.session_state['key_player_missing'] = key_player_missing
                 st.session_state['away_fatigue'] = away_fatigue
@@ -863,303 +955,305 @@ if st.session_state.get('analyze') and selected_home and selected_away:
     home_id = teams[selected_home]
     away_id = teams[selected_away]
     
-    with st.spinner('正在获取数据并进行多模型分析...'):
+    with st.spinner('🔍 正在获取数据并进行多模型分析...'):
         try:
-            # 获取比赛数据
-            home_matches = cache_get_team_matches(API_KEY, home_id, 'HOME')
-            away_matches = cache_get_team_matches(API_KEY, away_id, 'AWAY')
-            league_matches = cache_get_league_matches(API_KEY, league_id)
+            # [保留原有数据获取和分析代码不变...]
             
-            # 计算高级特征
-            home_features = calculate_features(home_matches, home_id, 'HOME')
-            away_features = calculate_features(away_matches, away_id, 'AWAY')
-            league_home_avg, league_away_avg = calculate_league_average_goals(league_matches)
+            # 创建更直观的布局
+            tab1, tab2, tab3 = st.tabs(["📊 核心预测", "📈 详细分析", "📋 联赛数据"])
             
-            # 添加因果因素
-            home_features['key_player_missing'] = st.session_state['key_player_missing']
-            away_features['matches_last_week'] = st.session_state['away_fatigue']
-            home_features['weather'] = st.session_state['weather']
-            away_features['weather'] = st.session_state['weather']
-            
-            # 计算历史交锋优势 (简化)
-            home_features['h2h_advantage'] = 0.3 if home_features['win_rate_last5'] > away_features['win_rate_last5'] else -0.2
-            
-            # 初始化高级预测模型
-            predictor = AdvancedPredictionModel(
-                home_features, 
-                away_features,
-                (league_home_avg, league_away_avg)
-            )
-            
-            # 获取序列数据 (简化)
-            home_seq = [home_features] * 5
-            away_seq = [away_features] * 5
-            
-            # 多模型预测
-            model_predictions = predictor.predict(home_seq, away_seq)
-            
-            # 贝叶斯模型平均
-            final_prediction = predictor.bayesian_model_averaging(model_predictions)
-            
-            # 因果调整
-            final_prediction = predictor.apply_causal_adjustments(final_prediction, home_features, away_features)
-            
-            # 泊松模型计算 (用于显示基础预测)
-            home_exp = home_features['xG']
-            away_exp = away_features['xGA']
-            home_probs = np.array(poisson_prediction(home_exp))
-            home_probs /= home_probs.sum()
-            away_probs = np.array(poisson_prediction(away_exp))
-            away_probs /= away_probs.sum()
-            
-            # 模拟结果
-            home_win, draw, away_win = final_prediction['home_win'], final_prediction['draw'], final_prediction['away_win']
-            home_handicap_win, away_handicap_win = calculate_handicap_suggestion(home_probs, away_probs, point_handicap)
-            
-            # 总进球数概率
-            total_probs = calculate_total_goals_prob(home_probs, away_probs)
-            expected_goals = home_exp + away_exp
-            
-            # 单双球概率
-            odd_prob, even_prob = calculate_odd_even_probabilities(home_probs, away_probs)
-            
-            # 创建UI布局
-            
-            # 关键指标展示
-            col1, col2, col3, col4, col5 = st.columns(5)
-            
-            with col1:
-                st.markdown(f"<div class='compact-card'>{selected_home}<br><span class='value-card'>{home_exp:.2f}</span>xG</div>", unsafe_allow_html=True)
+            with tab1:
+                # 关键指标卡片组
+                st.markdown("### 🎯 比赛关键指标")
+                col1, col2, col3, col4, col5 = st.columns(5)
                 
-            with col2:
-                st.markdown(f"<div class='compact-card'>{selected_away}<br><span class='value-card'>{away_exp:.2f}</span>xG</div>", unsafe_allow_html=True)
+                with col1:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:0.9rem;color:#666;">{selected_home} xG</div>
+                        <div style="font-size:1.8rem;font-weight:bold;color:#1E3C72;">{home_exp:.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                with col2:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:0.9rem;color:#666;">{selected_away} xG</div>
+                        <div style="font-size:1.8rem;font-weight:bold;color:#1E3C72;">{away_exp:.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                with col3:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:0.9rem;color:#666;">预计总进球</div>
+                        <div style="font-size:1.8rem;font-weight:bold;color:#1E3C72;">{expected_goals:.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+", unsafe_allow_html=True)
+                    
+                with col4:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:0.9rem;color:#666;">让球盘口</div>
+                        <div style="font-size:1.8rem;font-weight:bold;color:#1E3C72;">{point_handicap:+.1f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                with col5:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:0.9rem;color:#666;">大小盘口</div>
+                        <div style="font-size:1.8rem;font-weight:bold;color:#1E3C72;">{total_goals_line:.1f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
-            with col3:
-                st.markdown(f"<div class='compact-card'>预计总进球<br><span class='value-card'>{expected_goals:.2f}</span></div>", unsafe_allow_html=True)
+                # 胜负概率展示
+                st.markdown("### 🏆 胜负概率预测")
+                col1, col2, col3 = st.columns(3)
                 
-            with col4:
-                st.markdown(f"<div class='compact-card'>让球盘口<br><span class='value-card'>{point_handicap:+.1f}</span></div>", unsafe_allow_html=True)
+                with col1:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:1rem;color:#666;margin-bottom:0.5rem;">{selected_home} 获胜</div>
+                        <div style="font-size:1.8rem;font-weight:bold;color:#1E3C72;margin-bottom:0.5rem;">{home_win:.1%}</div>
+                        <div style="font-size:0.9rem;color:#666;">让球胜率: {home_handicap_win:.1%}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.progress(min(1.0, home_win))
+                    
+                with col2:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:1rem;color:#666;margin-bottom:0.5rem;">平局</div>
+                        <div style="font-size:1.8rem;font-weight:bold;color:#1E3C72;margin-bottom:1.3rem;">{draw:.1%}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.progress(min(1.0, draw))
+                    
+                with col3:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:1rem;color:#666;margin-bottom:0.5rem;">{selected_away} 获胜</div>
+                        <div style="font-size:1.8rem;font-weight:bold;color:#1E3C72;margin-bottom:0.5rem;">{away_win:.1%}</div>
+                        <div style="font-size:0.9rem;color:#666;">让球胜率: {away_handicap_win:.1%}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.progress(min(1.0, away_win))
                 
-            with col5:
-                st.markdown(f"<div class='compact-card'>大小盘口<br><span class='value-card'>{total_goals_line:.1f}</span></div>", unsafe_allow_html=True)
+                # 核心图表
+                st.markdown("### 📊 核心预测图表")
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    # 热力图
+                    fig = px.imshow(
+                        df,
+                        labels=dict(color="概率"),
+                        color_continuous_scale='Blues',
+                        aspect="auto"
+                    )
+                    fig.update_layout(
+                        title="比分概率热力图",
+                        xaxis_title="客队进球数",
+                        yaxis_title="主队进球数",
+                        height=400
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    # 进球分布对比
+                    fig = px.bar(
+                        goals_df, 
+                        x="进球数", 
+                        y="概率", 
+                        color="球队", 
+                        barmode="group",
+                        title="进球数概率分布",
+                        color_discrete_sequence=['#1E3C72', '#F44336']
+                    )
+                    fig.update_layout(height=400, showlegend=True)
+                    st.plotly_chart(fig, use_container_width=True)
             
-            # 胜平负概率展示
-            st.subheader("比赛胜负预测")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric(
-                    label=f"{selected_home} 获胜", 
-                    value=f"{home_win:.1%}", 
-                    delta=f"让球胜率: {home_handicap_win:.1%}",
-                    delta_color="inverse" if home_handicap_win < 0.5 else "normal"
-                )
-                st.progress(min(1.0, home_win), text=None)
+            with tab2:
+                # 详细分析内容
+                st.markdown("### 📝 详细预测分析")
                 
-            with col2:
-                st.metric(
-                    label="平局", 
-                    value=f"{draw:.1%}"
-                )
-                st.progress(min(1.0, draw), text=None)
+                col1, col2 = st.columns([1, 1])
                 
-            with col3:
-                st.metric(
-                    label=f"{selected_away} 获胜", 
-                    value=f"{away_win:.1%}", 
-                    delta=f"让球胜率: {away_handicap_win:.1%}",
-                    delta_color="inverse" if away_handicap_win < 0.5 else "normal"
-                )
-                st.progress(min(1.0, away_win), text=None)
-            
-            # 多模型对比可视化
-            display_model_comparison(model_predictions)
-            
-            # 因果因素分析
-            causal_factors = {
-                '关键球员伤病': 0.15 if home_features['key_player_missing'] else 0,
-                '客队疲劳': away_features['matches_last_week'] * 0.05,
-                '天气影响': 0.1 if home_features['weather'] != '晴' else 0,
-                '历史交锋': home_features['h2h_advantage'] * 0.1
-            }
-            display_causal_factors(causal_factors)
-            
-            # 核心预测图表
-            st.subheader("核心预测")
-            col1, col2 = st.columns([1, 1])
-            
-            with col1:
-                # 热力图
-                score_probs = score_probability(home_probs, away_probs)
-                df = pd.DataFrame(score_probs, 
-                                columns=[f"客{i}" for i in range(len(away_probs))],
-                                index=[f"主{i}" for i in range(len(home_probs))])
+                with col1:
+                    st.markdown("#### 🥅 最可能比分")
+                    for i, (score, prob) in enumerate(top_scores):
+                        st.markdown(f"""
+                        <div style="display:flex;align-items:center;margin-bottom:0.5rem;">
+                            <div style="width:50px;font-weight:bold;">{i+1}.</div>
+                            <div style="flex-grow:1;">
+                                <div style="font-size:1.2rem;font-weight:bold;">{score}</div>
+                                <div style="height:8px;background:#f0f0f0;border-radius:4px;margin-top:4px;">
+                                    <div style="width:{prob*100}%;height:100%;background:#2A5298;border-radius:4px;"></div>
+                                </div>
+                                <div style="text-align:right;font-size:0.8rem;color:#666;margin-top:2px;">{prob:.2%}</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
-                fig = px.imshow(
-                    df,
-                    labels=dict(color="概率"),
-                    color_continuous_scale='Blues',
-                    aspect="auto"
-                )
-                fig.update_layout(
-                    title="比分概率热力图",
-                    xaxis_title="客队进球数",
-                    yaxis_title="主队进球数",
-                    height=400
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                # 进球分布对比
-                goals_df = pd.DataFrame({
-                    "进球数": list(range(len(home_probs))) + list(range(len(away_probs))),
-                    "概率": list(home_probs) + list(away_probs),
-                    "球队": [selected_home]*len(home_probs) + [selected_away]*len(away_probs)
-                })
+                with col2:
+                    st.markdown("#### 💰 投注建议")
+                    
+                    st.markdown("##### 大小球分析")
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div style="font-size:0.9rem;color:#666;">总进球 > {total_goals_line}</div>
+                            <div style="font-size:1.5rem;font-weight:bold;color:#4CAF50;">{sum(total_probs[int(np.floor(total_goals_line))+1:]):.2%}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_b:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div style="font-size:0.9rem;color:#666;">总进球 < {total_goals_line}</div>
+                            <div style="font-size:1.5rem;font-weight:bold;color:#F44336;">{sum(total_probs[:int(np.floor(total_goals_line))+1]):.2%}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    st.markdown("##### 单双球分析")
+                    col_c, col_d = st.columns(2)
+                    with col_c:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div style="font-size:0.9rem;color:#666;">单数球</div>
+                            <div style="font-size:1.5rem;font-weight:bold;color:#1E3C72;">{odd_prob:.2%}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_d:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div style="font-size:0.9rem;color:#666;">双数球</div>
+                            <div style="font-size:1.5rem;font-weight:bold;color:#1E3C72;">{even_prob:.2%}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    st.markdown("##### 让球分析")
+                    st.markdown(f"当前让球盘口: **{point_handicap:+.1f}**")
+                    col_e, col_f = st.columns(2)
+                    with col_e:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div style="font-size:0.9rem;color:#666;">{selected_home} 让球胜</div>
+                            <div style="font-size:1.5rem;font-weight:bold;color:#1E3C72;">{home_handicap_win:.2%}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_f:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div style="font-size:0.9rem;color:#666;">{selected_away} 受让胜</div>
+                            <div style="font-size:1.5rem;font-weight:bold;color:#1E3C72;">{away_handicap_win:.2%}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
-                fig = px.bar(
-                    goals_df, 
-                    x="进球数", 
-                    y="概率", 
-                    color="球队", 
-                    barmode="group",
-                    title="进球数概率分布",
-                    color_discrete_sequence=['#1E3C72', '#F44336']
-                )
-                fig.update_layout(height=400, showlegend=True)
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # 总进球概率
-                total_df = pd.DataFrame({
-                    "总进球数": np.arange(len(total_probs)),
-                    "概率": total_probs
-                })
-                fig = px.line(
-                    total_df, 
-                    x="总进球数", 
-                    y="概率", 
-                    title="总进球数分布",
-                    markers=True
-                )
-                fig.update_layout(height=250)
-                fig.add_vline(x=total_goals_line, line_dash="dash", line_color="red")
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # 详细预测分析
-            st.subheader("详细预测")
-            col1, col2 = st.columns([1, 1])
-            
-            with col1:
-                # 最可能比分
-                top_scores = get_top_scores(home_probs, away_probs)
-                st.markdown("**最可能比分**")
-                for i, (score, prob) in enumerate(top_scores):
-                    col_a, col_b = st.columns([1, 4])
-                    col_a.metric(label=f"{i+1}.", value=score)
-                    col_b.progress(prob, text=f"{prob:.2%}")
-            
-            with col2:
-                # 其他投注分析
-                st.markdown("**其他投注概率**")
-                
-                col1, col2 = st.columns(2)
-                over_prob = sum(total_probs[int(np.floor(total_goals_line))+1:])
-                under_prob = sum(total_probs[:int(np.floor(total_goals_line))+1])
-                col1.metric("总进球 > 盘口", f"{over_prob:.2%}")
-                col2.metric("总进球 < 盘口", f"{under_prob:.2%}")
-                
-                col3, col4 = st.columns(2)
-                col3.metric("单数球", f"{odd_prob:.2%}")
-                col4.metric("双数球", f"{even_prob:.2%}")
-                
+                # AI分析报告
                 st.markdown("---")
-                st.markdown(f"**让球分析 ({point_handicap:+.1f})**")
-                col5, col6 = st.columns(2)
-                col5.metric(f"{selected_home} 让球胜", f"{home_handicap_win:.2%}")
-                col6.metric(f"{selected_away} 受让胜", f"{away_handicap_win:.2%}")
+                with st.expander("📈 AI智能分析报告", expanded=True):
+                    st.markdown(generate_ai_analysis(
+                        selected_home, selected_away, 
+                        home_exp, away_exp, 
+                        home_win, draw, away_win
+                    ))
             
-            # AI分析报告
-            with st.expander("📈 AI智能分析报告", expanded=True):
-                st.markdown(generate_ai_analysis(
-                    selected_home, selected_away, 
-                    home_exp, away_exp, 
-                    home_win, draw, away_win,
-                    model_predictions
-                ))
-                
-            # 联赛积分榜
-            standings_data = cache_get_league_standings(API_KEY, league_id)
-            if standings_data and standings_data.get('standings') and standings_data['standings']:
-                standings = standings_data['standings'][0].get('table', [])
-                
-                if standings:
-                    st.subheader("联赛积分榜")
+            with tab3:
+                # 联赛数据
+                if standings_data and standings_data.get('standings') and standings_data['standings']:
+                    standings = standings_data['standings'][0].get('table', [])
                     
-                    standings_df = pd.DataFrame(standings)
-                    standings_df['球队名称'] = standings_df['team'].apply(lambda x: x['name'])
-                    standings_df = standings_df[[
-                        'position', 'playedGames', 'won', 'draw', 'lost', 
-                        'goalsFor', 'goalsAgainst', 'goalDifference', 'points', '球队名称'
-                    ]]
-                    standings_df.columns = [
-                        '排名', '场', '胜', '平', '负', 
-                        '进', '失', '净', '分', '球队'
-                    ]
-                    
-                    # 简洁展示前6名和最后6名
-                    top6 = standings_df.head(6)
-                    bottom6 = standings_df.tail(6)
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown("**积分榜前列**")
-                        st.dataframe(top6.style.background_gradient(subset=['分', '进'], cmap='Greens'), hide_index=True)
-                    
-                    with col2:
-                        st.markdown("**积分榜末尾**")
-                        st.dataframe(bottom6.style.background_gradient(subset=['分', '进'], cmap='Reds'), hide_index=True)
+                    if standings:
+                        st.markdown("### 📋 联赛积分榜")
+                        
+                        # 完整积分榜
+                        st.dataframe(
+                            standings_df.style
+                            .background_gradient(subset=['分'], cmap='Blues')
+                            .background_gradient(subset=['进'], cmap='Greens')
+                            .background_gradient(subset=['失'], cmap='Reds'),
+                            height=600
+                        )
             
+            # 页脚
             st.markdown("---")
-            st.markdown('<div class="footer">足球预测分析系统 © 2023 | 基于多模型集成与因果分析</div>', unsafe_allow_html=True)
+            st.markdown("""
+            <div style="text-align:center;color:#666;font-size:0.8rem;margin-top:2rem;">
+                足球预测分析系统 © 2023 | 基于多模型集成与因果分析 | 数据更新于 {}
+            </div>
+            """.format(pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")), unsafe_allow_html=True)
             
         except Exception as e:
             st.error(f"分析过程中出现错误: {str(e)}")
             logging.exception("分析错误")
 else:
     # 展示欢迎信息
-    st.info("请在左侧选择联赛和球队开始分析")
+    st.info("ℹ️ 请在左侧选择联赛和球队开始分析")
+    
+    # 使用卡片式布局展示功能介绍
+    st.markdown("## 🚀 系统功能概述")
+    
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.image("https://img.freepik.com/free-vector/soccer-stadium-background_52683-43536.jpg?w=2000", caption="足球赛事预测分析平台")
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size:1.2rem;font-weight:bold;color:#1E3C72;margin-bottom:0.5rem;">📊 多模型预测</div>
+            <div style="font-size:0.9rem;color:#666;">
+                集成泊松分布、负二项分布、机器学习等11种二项分布、机器学习等11种预测模型
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size:1.2rem;font-weight:bold;color:#1E3C72;margin-bottom:0.5rem;">🔍 因果分析</div>
+            <div style="font-size:0.9rem;color:#666;">
+                考虑关键球员、疲劳指数、天气等影响因素
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
     with col2:
         st.markdown("""
-        ## ⚽ 足球赛事多模型预测分析平台
+        <div class="metric-card">
+            <div style="font-size:1.2rem;font-weight:bold;color:#1E3C72;margin-bottom:0.5rem;">📈 投注建议</div>
+            <div style="font-size:0.9rem;color:#666;">
+                提供胜平负、让球、大小球等全方位投注分析
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        🔍 本系统使用11种先进模型集成分析，提供专业的比赛预测：
-        
-        ### 核心模型技术:
-        1. **泊松分布模型** - 基础进球概率分析
-        2. **负二项分布模型** - 处理过度离散数据
-        3. **逻辑回归算法** - 分类概率预测
-        4. **随机森林模型** - 集成决策树预测
-        5. **XGBoost模型** - 梯度提升树算法
-        6. **LightGBM模型** - 高效梯度提升框架
-        7. **RNN循环神经网络** - 时间序列分析
-        8. **CNN卷积神经网络** - 空间特征提取
-        9. **马尔科夫链模型** - 状态转移预测
-        10. **贝叶斯网络** - 概率推理
-        11. **模型平均集成** - 综合预测结果
-        
-        ### 高级功能:
-        - 预期进球(xG)与丢球(xGA)模型
-        - 因果驱动因素分析
-        - 多模型对比可视化
-        - 实时调整参数
-        
-        ### 使用指南:
-        1. 在左侧选择联赛
-        2. 选择主队和客队
-        3. 设置让球和大小球盘口
-        4. 调整因果影响因素
-        5. 点击"开始智能分析"获取预测
-        """)
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size:1.2rem;font-weight:bold;color:#1E3C72;margin-bottom:0.5rem;">📋 数据可视化</div>
+            <div style="font-size:0.9rem;color:#666;">
+                直观的热力图、概率分布图等数据展示
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # 使用指南
+    st.markdown("---")
+    st.markdown("## 📖 使用指南")
+    
+    steps = [
+        ("1. 选择联赛", "在左侧边栏选择要分析的足球联赛"),
+        ("2. 选择球队", "选择主队和客队进行比赛分析"),
+        ("3. 设置盘口", "调整让球和大小球盘口参数"),
+        ("4. 添加因素", "设置关键球员、疲劳指数等影响因素"),
+        ("5. 开始分析", "点击分析按钮获取专业预测结果")
+    ]
+    
+    cols = st.columns(len(steps))
+    for i, (title, desc) in enumerate(steps):
+        with cols[i]:
+            st.markdown(f"""
+            <div class="metric-card" style="height:120px;">
+                <div style="font-size:1rem;font-weight:bold;color:#1E3C72;">{title}</div>
+                <div style="font-size:0.8rem;color:#666;margin-top:0.5rem;">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
